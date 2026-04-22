@@ -63,8 +63,8 @@ private:
     wgpu::Buffer gridInstVb = nullptr;
 
     // Storage buffers
-    wgpu::Buffer sbPos = nullptr;    // array<vec4<f32>> — x,y,z,pad
-    wgpu::Buffer sbVel = nullptr;    // array<vec4<f32>> — vx,vy,vz,pad
+    wgpu::Buffer sbPos = nullptr;    // array<vec4f> — x,y,z,pad
+    wgpu::Buffer sbVel = nullptr;    // array<vec4f> — vx,vy,vz,pad
     wgpu::Buffer sbType = nullptr;   // array<f32>
     wgpu::Buffer sbRadius = nullptr; // array<f32>
     wgpu::Buffer sbSel = nullptr;    // array<f32>
