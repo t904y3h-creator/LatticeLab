@@ -5,6 +5,7 @@
 #include "Engine/NeighborSearch/NeighborList.h"
 #include "Engine/SimBox.h"
 #include "Engine/gpu/GpuAtomBuffers.h"
+#include "Engine/gpu/GpuVerletCorrect.h"
 #include "Engine/gpu/GpuVerletPredict.h"
 #include "Engine/math/Vec3.h"
 #include "Engine/metrics/EnergyMetrics.h"
@@ -18,7 +19,7 @@ class Simulation {
 public:
     Simulation(SimBox& sim_box);
 
-    void enableGpuPredict(bool enable);
+    void enableGpu(bool enable);
 
     void update();
     void setSizeBox(Vec3f newSize, int cellSize = -1);
@@ -143,5 +144,5 @@ private:
     GpuAtomBuffers gpuBufs_;
 
     GpuVerletPredict gpuVerletPredict_;
-    bool gpuPredictEnabled_ = false;
+    GpuVerletCorrect gpuVerletCorrect_;
 };

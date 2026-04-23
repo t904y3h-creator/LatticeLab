@@ -1,23 +1,23 @@
-#include "GpuVerletPredict.h"
+#include "GpuVerletCorrect.h"
 
 #include "GpuAtomBuffers.h"
 
 #include <array>
 #include <cassert>
-#include <cstring>
-
-#include <webgpu/webgpu.hpp>
 
 #include "Engine/gpu/WGPUContext.h"
-#include "generated/shaders/verlet_predict.wgsl.h"
+#include "generated/shaders/verlet_correct.wgsl.h"
 
-GpuVerletPredict::GpuVerletPredict() { buildPipeline(); }
+GpuVerletCorrect::GpuVerletCorrect() { buildPipeline(); }
 
-void GpuVerletPredict::release() {
-    if (uniformBuffer_) {
-        uniformBuffer_.destroy();
-        uniformBuffer_ = nullptr;
-    }
+void GpuVerletCorrect::release() {
+    auto destroyBuf = [](wgpu::Buffer& b) {
+        if (b) {
+            b.destroy();
+            b = nullptr;
+        }
+    };
+    destroyBuf(uniformBuffer_);
     if (pipeline_) {
         pipeline_.release();
         pipeline_ = nullptr;
@@ -36,22 +36,14 @@ void GpuVerletPredict::release() {
     }
 }
 
-void GpuVerletPredict::buildPipeline() {
-    // 1. Shader module ──────────────────────────────────────────────────────
+void GpuVerletCorrect::buildPipeline() {
     WGPUShaderSourceWGSL wgslDesc{};
     wgslDesc.chain.sType = WGPUSType_ShaderSourceWGSL;
-    wgslDesc.code = wgpu::StringView(verlet_predictWGSL);
+    wgslDesc.code = wgpu::StringView(verlet_correctWGSL);
 
     wgpu::ShaderModuleDescriptor smDesc{};
     smDesc.nextInChain = &wgslDesc.chain;
     shaderModule_ = WGPUContext::instance().device().createShaderModule(smDesc);
-
-    // 2. Bind group layout ──────────────────────────────────────────────────
-    //    binding 0 — pos       (storage, read_write)
-    //    binding 1 — vel       (storage, read)
-    //    binding 2 — force     (storage, read)
-    //    binding 3 — inv_mass  (storage, read)
-    //    binding 4 — uniforms  (uniform)
 
     std::array<wgpu::BindGroupLayoutEntry, 5> bglEntries{};
 
@@ -68,7 +60,7 @@ void GpuVerletPredict::buildPipeline() {
     bglEntries[0].binding = 0;
     bglEntries[0].visibility = wgpu::ShaderStage::Compute;
     bglEntries[0].buffer.type = wgpu::BufferBindingType::Uniform;
-    bglEntries[0].buffer.minBindingSize = 16; // TODO сделать структуру Uniform как часть класса
+    bglEntries[0].buffer.minBindingSize = 16;
     bglEntries[1] = makeStorageEntry(1, wgpu::BufferBindingType::Storage);
     bglEntries[2] = makeStorageEntry(2, wgpu::BufferBindingType::ReadOnlyStorage);
     bglEntries[3] = makeStorageEntry(3, wgpu::BufferBindingType::ReadOnlyStorage);
@@ -79,6 +71,7 @@ void GpuVerletPredict::buildPipeline() {
     bglDesc.entries = bglEntries.data();
     bindGroupLayout_ = WGPUContext::instance().device().createBindGroupLayout(bglDesc);
 
+    // 3. Pipeline layout
     WGPUBindGroupLayout rawBGL = bindGroupLayout_;
 
     wgpu::PipelineLayoutDescriptor plDesc{};
@@ -86,24 +79,25 @@ void GpuVerletPredict::buildPipeline() {
     plDesc.bindGroupLayouts = &rawBGL;
     pipelineLayout_ = WGPUContext::instance().device().createPipelineLayout(plDesc);
 
+    // 4. Compute pipeline
     wgpu::ComputePipelineDescriptor cpDesc{};
     cpDesc.layout = pipelineLayout_;
     cpDesc.compute.module = shaderModule_;
     cpDesc.compute.entryPoint = wgpu::StringView("main");
     pipeline_ = WGPUContext::instance().device().createComputePipeline(cpDesc);
 
+    // 5. Uniform buffer (16 байт: dt, accelDamping, atomCount, pad)
     wgpu::BufferDescriptor ubDesc{};
-    ubDesc.label = wgpu::StringView("VerletPredict_Uniforms");
+    ubDesc.label = wgpu::StringView("VerletCorrect_Uniforms");
     ubDesc.size = 16;
     ubDesc.usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst;
     ubDesc.mappedAtCreation = false;
     uniformBuffer_ = WGPUContext::instance().device().createBuffer(ubDesc);
 }
 
-wgpu::BindGroup GpuVerletPredict::makeBindGroup(GpuAtomBuffers& buffers) const {
-    const size_t cap = buffers.capacity();
-    const size_t vec4Bytes = cap * 4 * sizeof(float);
-    const size_t f32Bytes = cap * sizeof(float);
+wgpu::BindGroup GpuVerletCorrect::makeBindGroup(GpuAtomBuffers& buffers) const {
+    const size_t vec4Bytes = buffers.capacity() * 4 * sizeof(float);
+    const size_t f32Bytes = buffers.capacity() * sizeof(float);
 
     std::array<wgpu::BindGroupEntry, 5> entries{};
 
@@ -120,9 +114,9 @@ wgpu::BindGroup GpuVerletPredict::makeBindGroup(GpuAtomBuffers& buffers) const {
     entries[0].buffer = uniformBuffer_;
     entries[0].offset = 0;
     entries[0].size = 16;
-    entries[1] = makeStorageBE(1, buffers.bufPos(), vec4Bytes);
-    entries[2] = makeStorageBE(2, buffers.bufVel(), vec4Bytes);
-    entries[3] = makeStorageBE(3, buffers.bufF(), vec4Bytes);
+    entries[1] = makeStorageBE(1, buffers.bufVel(), vec4Bytes);
+    entries[2] = makeStorageBE(2, buffers.bufF(), vec4Bytes);
+    entries[3] = makeStorageBE(3, buffers.bufPrevF(), vec4Bytes);
     entries[4] = makeStorageBE(4, buffers.bufInvMass(), f32Bytes);
 
     wgpu::BindGroupDescriptor bgDesc{};
@@ -133,31 +127,25 @@ wgpu::BindGroup GpuVerletPredict::makeBindGroup(GpuAtomBuffers& buffers) const {
     return WGPUContext::instance().device().createBindGroup(bgDesc);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// dispatch — основной публичный метод
-// ─────────────────────────────────────────────────────────────────────────────
-
-void GpuVerletPredict::dispatch(GpuAtomBuffers& buffers, uint32_t atomCount, float dt) {
+void GpuVerletCorrect::dispatch(GpuAtomBuffers& buffers, uint32_t atomCount, float dt, float accelDamping) {
     assert(isReady());
     assert(atomCount <= buffers.capacity());
 
-    // Обновляем uniform-буфер.
     struct GpuUniforms {
         float dt;
+        float accelDamping;
         uint32_t atomCount;
-        uint32_t pad[2];
-    } uni{dt, atomCount, {0u, 0u}};
+        uint32_t pad;
+    } uni{dt, accelDamping, atomCount, 0u};
 
     WGPUContext::instance().queue().writeBuffer(uniformBuffer_, 0, &uni, sizeof(uni));
 
-    // Создаём bind group под текущие буферы.
     wgpu::BindGroup bindGroup = makeBindGroup(buffers);
 
-    // Кодируем и отправляем compute-pass.
     wgpu::CommandEncoder enc = WGPUContext::instance().device().createCommandEncoder({});
     {
         wgpu::ComputePassDescriptor passDesc{};
-        passDesc.label = wgpu::StringView("VerletPredict");
+        passDesc.label = wgpu::StringView("VerletCorrect");
         wgpu::ComputePassEncoder pass = enc.beginComputePass(passDesc);
 
         pass.setPipeline(pipeline_);

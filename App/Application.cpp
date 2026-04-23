@@ -2,7 +2,6 @@
 
 #include <cmath>
 #include <cstdlib>
-// #include <fstream>
 
 #include <imgui_impl_wgpu.h>
 
@@ -75,18 +74,7 @@ int Application::run() {
     // simulation.createAtom(Vec3f(24, 25, 3), Vec3f(1, 0, 0), AtomData::Type::Na);
     // simulation.createAtom(Vec3f(28, 25, 3), Vec3f(-1, 0, 0), AtomData::Type::Na);
 
-    simulation.enableGpuPredict(true);
-    // for (size_t i = 0; i < 1000; ++i) {
-    //     simulation.update();
-    // }
-    // auto save_binary = [](std::string_view filename, std::span<const float> data) {
-    //     std::ofstream out(filename.data(), std::ios::binary);
-    //     if (out.is_open()) {
-    //         out.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(float));
-    //     }
-    //     out.close();
-    // };
-    // save_binary("gpu_verlet_predict_1000.tmp", simulation.atoms().floatDataSpan());
+    simulation.enableGpu(true);
 
     auto startTime = Clock::now();
     double renderAccum = 0.0;

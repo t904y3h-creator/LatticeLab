@@ -1,13 +1,15 @@
 #include "VerletScheme.h"
 
 #include "Engine/gpu/GpuAtomBuffers.h"
+#include "Engine/gpu/GpuVerletCorrect.h"
 #include "Engine/gpu/GpuVerletPredict.h"
 #include "Engine/metrics/Profiler.h"
 #include "Engine/physics/integrators/StepOps.h"
 
-void VerletScheme::setGpuPredict(GpuAtomBuffers* gpuBufs, GpuVerletPredict* gpuPredict) {
+void VerletScheme::initGpu(GpuAtomBuffers* gpuBufs, GpuVerletPredict* gpuPredict, GpuVerletCorrect* gpuCorrect) {
     gpuBufs_ = gpuBufs;
     gpuPredict_ = (gpuPredict && gpuPredict->isReady()) ? gpuPredict : nullptr;
+    gpuCorrect_ = (gpuCorrect && gpuCorrect->isReady()) ? gpuCorrect : nullptr;
 }
 
 void VerletScheme::pipeline(StepData& stepData) const {
@@ -15,7 +17,8 @@ void VerletScheme::pipeline(StepData& stepData) const {
 
     StepOps::predictAndSync(stepData, [this](AtomStorage& storage, float dt) { this->runGpuPredict(storage, dt); });
     StepOps::computeForces(stepData);
-    correct(stepData.atomStorage, stepData.accelDamping, stepData.dt);
+
+    runGpuCorrect(stepData);
 }
 
 void VerletScheme::runGpuPredict(AtomStorage& atoms, float dt) const {
@@ -37,28 +40,19 @@ void VerletScheme::runGpuPredict(AtomStorage& atoms, float dt) const {
     gpuBufs_->downloadPositions(atoms, n);
 }
 
-void VerletScheme::correct(AtomStorage& atomStorage, float accelDamping, float dt) const {
-    PROFILE_SCOPE("VerletScheme::correct");
-    const size_t n = atomStorage.mobileCount();
+void VerletScheme::runGpuCorrect(StepData& stepData) const {
+    PROFILE_SCOPE("VerletScheme::correct [GPU]");
 
-    const float* RESTRICT fx = atomStorage.fxData();
-    const float* RESTRICT fy = atomStorage.fyData();
-    const float* RESTRICT fz = atomStorage.fzData();
-    const float* RESTRICT pfx = atomStorage.pfxData();
-    const float* RESTRICT pfy = atomStorage.pfyData();
-    const float* RESTRICT pfz = atomStorage.pfzData();
+    AtomStorage& atoms = stepData.atomStorage;
+    const uint32_t n = static_cast<uint32_t>(atoms.mobileCount());
 
-    float* RESTRICT vx = atomStorage.vxData();
-    float* RESTRICT vy = atomStorage.vyData();
-    float* RESTRICT vz = atomStorage.vzData();
+    // Загружаем свежие CPU-силы (текущие + предыдущие) и скорости.
+    // invMass уже на GPU с этапа predict — не перезагружаем.
+    gpuBufs_->uploadVelocities(atoms, n);
+    gpuBufs_->uploadForces(atoms, n);
+    gpuBufs_->uploadPrevForces(atoms, n);
 
-    const float* RESTRICT invMass = atomStorage.invMassData();
+    gpuCorrect_->dispatch(*gpuBufs_, n, stepData.dt, stepData.accelDamping);
 
-#pragma GCC ivdep
-    for (size_t i = 0; i < n; ++i) {
-        const float halfDtInvMass = 0.5f * accelDamping * dt * invMass[i];
-        vx[i] += (pfx[i] + fx[i]) * halfDtInvMass;
-        vy[i] += (pfy[i] + fy[i]) * halfDtInvMass;
-        vz[i] += (pfz[i] + fz[i]) * halfDtInvMass;
-    }
+    gpuBufs_->downloadVelocities(atoms, n);
 }

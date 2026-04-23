@@ -13,20 +13,19 @@ Simulation::Simulation(SimBox& box) : sim_box_(box), integrator() {
     forceField_.syncWalls(sim_box_);
 }
 
-void Simulation::enableGpuPredict(bool enable) {
-    gpuPredictEnabled_ = enable;
+void Simulation::enableGpu(bool enable) {
     auto& schemeVar = integrator.getSchemeImpl();
 
     if (auto* scheme = std::get_if<VerletScheme>(&schemeVar)) {
-        if (enable && gpuVerletPredict_.isReady()) {
-            scheme->setGpuPredict(&gpuBufs_, &gpuVerletPredict_);
+        if (enable && gpuVerletPredict_.isReady() && gpuVerletCorrect_.isReady()) {
+            scheme->initGpu(&gpuBufs_, &gpuVerletPredict_, &gpuVerletCorrect_);
         }
         else {
-            scheme->setGpuPredict(nullptr, nullptr);
+            scheme->initGpu(nullptr, nullptr, nullptr);
         }
     }
     else {
-        std::cerr << "GPU predict is only available for Verlet integrator" << std::endl;
+        std::cerr << "GPU version is only available for Verlet integrator" << std::endl;
     }
 }
 
