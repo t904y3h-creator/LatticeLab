@@ -8,8 +8,26 @@
 
 Simulation::Simulation(SimBox& box) : sim_box_(box), integrator() {
     atomStorage_.reserve(250000);
+    gpuBufs_.resize(250000);
     neighborList_.setParams(5.f, 1.f);
     forceField_.syncWalls(sim_box_);
+}
+
+void Simulation::enableGpuPredict(bool enable) {
+    gpuPredictEnabled_ = enable;
+    auto& schemeVar = integrator.getSchemeImpl();
+
+    if (auto* scheme = std::get_if<VerletScheme>(&schemeVar)) {
+        if (enable && gpuVerletPredict_.isReady()) {
+            scheme->setGpuPredict(&gpuBufs_, &gpuVerletPredict_);
+        }
+        else {
+            scheme->setGpuPredict(nullptr, nullptr);
+        }
+    }
+    else {
+        std::cerr << "GPU predict is only available for Verlet integrator" << std::endl;
+    }
 }
 
 void Simulation::refreshMetricsCache() const {

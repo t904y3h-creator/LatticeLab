@@ -10,8 +10,8 @@
 #include <webgpu.h>
 #include <webgpu/webgpu.hpp>
 
+#include "Engine/gpu/WGPUContext.h"
 #include "Engine/metrics/Profiler.h"
-#include "Rendering/WGPUContext.h"
 
 void FrameProducer::startVideoCapture(FFmpegStreamer* streamer, const CaptureSettings& settings) {
     this->streamer = streamer;

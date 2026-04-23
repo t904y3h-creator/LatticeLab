@@ -26,6 +26,8 @@ struct StepData {
 };
 
 class Integrator {
+    using SchemeVariant = std::variant<VerletScheme, KDKScheme, RK4Scheme, LangevinScheme>;
+
 public:
     enum class Scheme : uint8_t {
         Verlet,   // классический Velocity Verlet: устойчивый и быстрый базовый выбор
@@ -45,9 +47,9 @@ public:
 
     void step(StepData& stepData);
 
-private:
-    using SchemeVariant = std::variant<VerletScheme, KDKScheme, RK4Scheme, LangevinScheme>;
+    SchemeVariant& getSchemeImpl() { return scheme_impl; }
 
+private:
     static SchemeVariant makeSchemeImpl(Scheme scheme);
 
     Scheme integrator_type = Scheme::Verlet;

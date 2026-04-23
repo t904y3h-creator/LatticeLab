@@ -259,6 +259,7 @@ public:
 
     size_t size() const { return count_; }
     size_t mobileCount() const { return mobileCount_; }
+    size_t capacity() const { return capacity_; }
     bool empty() const { return count_ == 0; }
     bool isAtomFixed(size_t i) const { return i >= mobileCount_; }
 
@@ -349,13 +350,21 @@ public:
     float* vzData() { return vz_; }
     const float* vzData() const { return vz_; }
     float* fxData() { return fx_; }
+    const float* fxData() const { return fx_; }
     float* fyData() { return fy_; }
+    const float* fyData() const { return fy_; }
     float* fzData() { return fz_; }
+    const float* fzData() const { return fz_; }
     float* pfxData() { return pfx_; }
+    const float* pfxData() const { return pfx_; }
     float* pfyData() { return pfy_; }
+    const float* pfyData() const { return pfy_; }
     float* pfzData() { return pfz_; }
+    const float* pfzData() const { return pfz_; }
     float* energyData() { return pe_; }
+    const float* energyData() const { return pe_; }
     float* invMassData() { return invMass_; }
+    const float* invMassData() const { return invMass_; }
     float* chargeData() { return charge_; }
     const float* chargeData() const { return charge_; }
 

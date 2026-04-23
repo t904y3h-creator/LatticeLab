@@ -8,11 +8,11 @@
 #include "App/interaction/ToolsManager.h"
 #include "App/interaction/picking/PickingSystem.h"
 #include "Engine/SimBox.h"
+#include "Engine/gpu/WGPUContext.h"
 #include "Engine/physics/AtomData.h"
 #include "Engine/physics/AtomStorage.h"
 #include "Engine/physics/Bond.h"
 #include "Rendering/BaseRenderer.h"
-#include "Rendering/WGPUContext.h"
 
 template <typename T>
 concept IsRenderer = std::derived_from<T, IRenderer>;

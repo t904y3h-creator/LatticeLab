@@ -1,4 +1,16 @@
-set(WGSL_SHADER_SRC "${CMAKE_SOURCE_DIR}/Rendering/shaders")
+set(WGSL_SHADER_DIRS 
+    "${CMAKE_SOURCE_DIR}/Rendering/shaders"
+    "${CMAKE_SOURCE_DIR}/Engine/gpu/shaders"
+)
+
+set(WGSL_SOURCES "")
+foreach(DIR ${WGSL_SHADER_DIRS})
+    file(GLOB FILES_IN_DIR "${DIR}/*.wgsl")
+    list(APPEND WGSL_SOURCES ${FILES_IN_DIR})
+endforeach()
+
+set(WGSL_HEADERS "")
+
 set(WGSL_SHADER_OUT "${GENERATED_DIR}/shaders")
 file(MAKE_DIRECTORY "${WGSL_SHADER_OUT}")
 
@@ -22,9 +34,6 @@ function(compile_wgsl_to_header WGSL_FILE OUT_HEADERS_VAR)
 
     set(${OUT_HEADERS_VAR} ${${OUT_HEADERS_VAR}} ${H_FILE} PARENT_SCOPE)
 endfunction()
-
-file(GLOB WGSL_SOURCES "${WGSL_SHADER_SRC}/*.wgsl")
-set(WGSL_HEADERS "")
 
 foreach(FILE ${WGSL_SOURCES})
     compile_wgsl_to_header(${FILE} WGSL_HEADERS)

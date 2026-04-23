@@ -17,10 +17,10 @@
 #include "App/capture/CaptureController.h"
 #include "App/save_system/AppSaveState.h"
 #include "Engine/Simulation.h"
+#include "Engine/gpu/WGPUContext.h"
 #include "Engine/io/SimulationStateIO.h"
 #include "GUI/interface/UiState.h"
 #include "Rendering/BaseRenderer.h"
-#include "Rendering/WGPUContext.h"
 
 namespace {
     constexpr const char* kBlockIndent = "  ";

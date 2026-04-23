@@ -10,10 +10,10 @@
 
 #include "App/AppSignals.h"
 #include "Engine/Simulation.h"
+#include "Engine/gpu/WGPUContext.h"
 #include "GUI/interface/UiState.h"
 #include "GUI/interface/file_dialog/FileDialogManager.h"
 #include "GUI/interface/panels/io/ioPanelWidgets.h"
-#include "Rendering/WGPUContext.h"
 
 namespace {
     constexpr float kSceneTileRounding = 10.0f;

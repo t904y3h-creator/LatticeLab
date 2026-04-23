@@ -2,10 +2,10 @@
 
 #include <backends/imgui_impl_wgpu.h>
 
+#include "Engine/gpu/WGPUContext.h"
 #include "Engine/math/Vec2.h"
 #include "GUI/interface/interface.h"
 #include "Rendering/BaseRenderer.h"
-#include "Rendering/WGPUContext.h"
 
 GLFWwindow* WindowEvents::window = nullptr;
 std::unique_ptr<IRenderer>* WindowEvents::renderer = nullptr;

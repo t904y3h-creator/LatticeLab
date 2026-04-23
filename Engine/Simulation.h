@@ -4,6 +4,8 @@
 
 #include "Engine/NeighborSearch/NeighborList.h"
 #include "Engine/SimBox.h"
+#include "Engine/gpu/GpuAtomBuffers.h"
+#include "Engine/gpu/GpuVerletPredict.h"
 #include "Engine/math/Vec3.h"
 #include "Engine/metrics/EnergyMetrics.h"
 #include "Engine/physics/AtomData.h"
@@ -15,6 +17,8 @@
 class Simulation {
 public:
     Simulation(SimBox& sim_box);
+
+    void enableGpuPredict(bool enable);
 
     void update();
     void setSizeBox(Vec3f newSize, int cellSize = -1);
@@ -135,4 +139,9 @@ private:
     std::string sceneDescription_;
     mutable bool metricsCacheValid_ = false;
     mutable EnergyMetrics::Snapshot metricsCache_{};
+
+    GpuAtomBuffers gpuBufs_;
+
+    GpuVerletPredict gpuVerletPredict_;
+    bool gpuPredictEnabled_ = false;
 };

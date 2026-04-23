@@ -4,7 +4,7 @@
 #include <backends/imgui_impl_wgpu.h>
 
 #include "App/capture/CaptureController.h"
-#include "Rendering/WGPUContext.h"
+#include "Engine/gpu/WGPUContext.h"
 
 #define ICON_MIN_FA 0xf000
 #define ICON_MAX_FA 0xf897

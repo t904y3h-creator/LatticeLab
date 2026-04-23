@@ -6,10 +6,10 @@
 #include "App/interaction/ToolsManager.h"
 #include "App/save_system/AppStateIO.h"
 #include "Engine/Simulation.h"
+#include "Engine/gpu/WGPUContext.h"
 #include "GUI/interface/UiState.h"
 #include "Rendering/2d/Renderer2DWGPU.h"
 #include "Rendering/3d/Renderer3DWGPU.h"
-#include "Rendering/WGPUContext.h"
 
 namespace {
     void shiftAtoms(AtomStorage& atomStorage, Vec3f delta) {
