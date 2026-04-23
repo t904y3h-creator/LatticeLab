@@ -14,7 +14,6 @@ public:
     GpuVerletCorrect& operator=(const GpuVerletCorrect&) = delete;
 
     void init(wgpu::Device device, wgpu::Queue queue);
-    void release();
 
     bool isReady() const { return pipeline_ != nullptr; }
 

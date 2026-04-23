@@ -9,25 +9,11 @@
 #include "Engine/gpu/WGPUContext.h"
 #include "Engine/physics/AtomStorage.h"
 
-void GpuAtomBuffers::release() {
-    if (capacity_ == 0) {
-        return;
-    }
-    bufPos_.release();
-    bufVel_.release();
-    bufF_.release();
-    bufPrevF_.release();
-    bufInvMass_.release();
-    capacity_ = 0;
-}
-
 void GpuAtomBuffers::resize(size_t capacity) {
     if (capacity == capacity_) {
         return;
     }
-    assert(isInitialized());
 
-    release();
     capacity_ = capacity;
 
     const size_t vec4Bytes = capacity * 4 * sizeof(float);
@@ -40,7 +26,7 @@ void GpuAtomBuffers::resize(size_t capacity) {
     bufInvMass_ = makeStorageBuffer(f32Bytes, "AtomInvMass");
 }
 
-wgpu::Buffer GpuAtomBuffers::makeStorageBuffer(size_t bytes, const char* label) {
+wgpu::Buffer GpuAtomBuffers::makeStorageBuffer(size_t bytes, std::string_view label) {
     wgpu::BufferDescriptor desc{};
     desc.label = wgpu::StringView(label);
     desc.size = bytes;
@@ -100,8 +86,6 @@ void GpuAtomBuffers::downloadRaw(wgpu::Buffer src, size_t floatCount) {
         enc.copyBufferToBuffer(src, 0, staging, 0, bytes);
         wgpu::CommandBuffer cmd = enc.finish({});
         WGPUContext::instance().queue().submit(1, &cmd);
-        cmd.release();
-        enc.release();
     }
 
     struct MapCtx {
@@ -126,7 +110,6 @@ void GpuAtomBuffers::downloadRaw(wgpu::Buffer src, size_t floatCount) {
 
     staging.unmap();
     staging.destroy();
-    staging.release();
 }
 
 void GpuAtomBuffers::unpackVec4(float* xs, float* ys, float* zs, size_t count) {

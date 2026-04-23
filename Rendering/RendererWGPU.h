@@ -27,10 +27,10 @@ protected:
 
     wgpu::Device device = nullptr;
 
-    void initAtomPipeline(const char* atomWGSL);
-    void initGridPipeline(const char* gridWGSL);
-    void initBoxPipeline(const char* boxWGSL);
-    void initBondPipeline(const char* bondWGSL);
+    void initAtomPipeline(std::string_view atomWGSL);
+    void initGridPipeline(std::string_view gridWGSL);
+    void initBoxPipeline(std::string_view boxWGSL);
+    void initBondPipeline(std::string_view bondWGSL);
 
 private:
     struct SceneUniforms {
@@ -87,10 +87,10 @@ private:
     void initBoxBuffer();
     void initBondBuffer();
     void initGridLineBuffer();
-    void initLinePipeline(wgpu::RenderPipeline& outPipeline, const char* wgsl);
+    void initLinePipeline(wgpu::RenderPipeline& outPipeline, std::string_view wgsl);
 
     // Helpers
-    wgpu::Buffer createBuffer(uint64_t size, wgpu::BufferUsage usage, wgpu::StringView label = wgpu::StringView());
+    wgpu::Buffer createBuffer(uint64_t size, wgpu::BufferUsage usage, std::string_view label);
     void ensureStorageBuffers(size_t count);
     template <typename T> void uploadStorageBuffer(wgpu::Buffer& buf, const T* data, size_t count);
 

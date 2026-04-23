@@ -20,11 +20,11 @@ SpatialGrid::SpatialGrid(int sizeX, int sizeY, int sizeZ, int cellSize) : sizeX(
     this->sizeY = cellsY;
     this->sizeZ = cellsZ;
     countCells = this->sizeX * this->sizeY * this->sizeZ;
-    offsets.assign(countCells + 1, 0);
+    offsets_.assign(countCells + 1, 0);
     rebuildNeighborOffsets();
     counts_.assign(countCells, 0);
     cellIndices_.reserve(256);
-    atomsInCells.reserve(256);
+    atomsInCells_.reserve(256);
 }
 
 void SpatialGrid::rebuild(std::span<const float> posX, std::span<const float> posY, std::span<const float> posZ) {
@@ -32,8 +32,8 @@ void SpatialGrid::rebuild(std::span<const float> posX, std::span<const float> po
     const size_t n = posX.size();
 
     if (n == 0) {
-        atomsInCells.clear();
-        std::fill(offsets.begin(), offsets.end(), 0);
+        atomsInCells_.clear();
+        std::fill(offsets_.begin(), offsets_.end(), 0);
         stats_.recordRebuild(0, 0, 0.0f);
         return;
     }
@@ -47,7 +47,7 @@ void SpatialGrid::rebuild(std::span<const float> posX, std::span<const float> po
         ++counts_[cell];
     }
 
-    offsets.resize(countCells + 2);
+    offsets_.resize(countCells + 2);
     uint32_t running = 0;
     size_t nonEmptyCellCount = 0;
     uint32_t maxAtomsPerCell = 0;
@@ -56,15 +56,15 @@ void SpatialGrid::rebuild(std::span<const float> posX, std::span<const float> po
         nonEmptyCellCount += (cnt > 0);
         maxAtomsPerCell = std::max(counts_[cell], maxAtomsPerCell);
         counts_[cell] = running;
-        offsets[cell] = running;
+        offsets_[cell] = running;
         running += cnt;
     }
-    offsets[countCells] = running;
+    offsets_[countCells] = running;
 
-    atomsInCells.resize(n);
+    atomsInCells_.resize(n);
     for (size_t i = 0; i < n; ++i) {
         const size_t cell = cellIndices_[i];
-        atomsInCells[counts_[cell]++] = i;
+        atomsInCells_[counts_[cell]++] = i;
     }
 
     const float averageAtomsPerNonEmptyCell = nonEmptyCellCount > 0 ? static_cast<float>(n) / static_cast<float>(nonEmptyCellCount) : 0.0f;
@@ -84,8 +84,8 @@ void SpatialGrid::resize(int newSizeX, int newSizeY, int newSizeZ, int newCellSi
     sizeZ = std::max(1 + 2 * kGhostLayers, (newSizeZ + cellSize - 1) / cellSize + 2 * kGhostLayers);
 
     countCells = sizeX * sizeY * sizeZ;
-    offsets.assign(countCells + 1, 0);
-    atomsInCells.clear();
+    offsets_.assign(countCells + 1, 0);
+    atomsInCells_.clear();
     rebuildNeighborOffsets();
     stats_.reset();
 }
@@ -103,6 +103,6 @@ void SpatialGrid::rebuildNeighborOffsets() noexcept {
 }
 
 size_t SpatialGrid::memoryBytes() const {
-    return atomsInCells.capacity() * sizeof(atomsInCells[0]) + offsets.capacity() * sizeof(offsets[0]) + sizeof(neighborOffsets27_) +
+    return atomsInCells_.capacity() * sizeof(atomsInCells_[0]) + offsets_.capacity() * sizeof(offsets_[0]) + sizeof(neighborOffsets27_) +
            cellIndices_.capacity() * sizeof(cellIndices_[0]) + counts_.capacity() * sizeof(counts_[0]);
 }

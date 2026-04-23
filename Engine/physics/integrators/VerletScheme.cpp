@@ -46,7 +46,7 @@ void VerletScheme::runGpuCorrect(StepData& stepData) const {
     AtomStorage& atoms = stepData.atomStorage;
     const uint32_t n = static_cast<uint32_t>(atoms.mobileCount());
 
-    // Загружаем свежие CPU-силы (текущие + предыдущие) и скорости.
+    // Загружаем свежие CPU-силы и скорости.
     // invMass уже на GPU с этапа predict — не перезагружаем.
     gpuBufs_->uploadVelocities(atoms, n);
     gpuBufs_->uploadForces(atoms, n);

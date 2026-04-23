@@ -32,7 +32,6 @@ public:
     void resetStats();
     void recordRebuild(int simStep);
 
-    // Hot-path helper для записи соседей одного атома.
     inline void writeAtomNeighbors(const SpatialGrid& grid, const float* x, const float* y, const float* z, const uint32_t atomIndex,
                                    const float xi, const float yi, const float zi, std::vector<uint32_t>& outNeighbors) const {
         const auto& offsets27 = grid.neighborOffsets27();
@@ -58,7 +57,6 @@ public:
 private:
     void reserveListBuffers(const AtomStorage& atoms);
 
-    // uint32_t - 4 байта, максимальное количество пар в NL ~ 4 млрд
     std::vector<uint32_t> neighbors_;
     std::vector<uint32_t> offsets_;
 

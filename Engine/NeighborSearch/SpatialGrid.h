@@ -31,8 +31,8 @@ public:
 
     // (warning) нет проверки выхода за границы
     [[nodiscard]] std::span<const uint32_t> atomsInCell(size_t linearIndex) const noexcept {
-        const size_t begin = offsets[linearIndex];
-        return std::span<const uint32_t>(atomsInCells.data() + begin, offsets[linearIndex + 1] - begin);
+        const size_t begin = offsets_[linearIndex];
+        return std::span<const uint32_t>(atomsInCells_.data() + begin, offsets_[linearIndex + 1] - begin);
     }
 
     int worldToCellX(float x) const { return toCell(x, sizeX); }
@@ -41,7 +41,7 @@ public:
 
     [[nodiscard]] int countAtomsInCell(int cx, int cy, int cz) const {
         const size_t idx = static_cast<size_t>(index(cx, cy, cz));
-        return static_cast<int>(offsets[idx + 1] - offsets[idx]);
+        return static_cast<int>(offsets_[idx + 1] - offsets_[idx]);
     }
 
     [[nodiscard]] int linearCellOfAtom(uint32_t atomIndex) const noexcept { return static_cast<int>(cellIndices_[atomIndex]); }
@@ -49,12 +49,21 @@ public:
 
     [[nodiscard]] int index(int x, int y, int z) const noexcept { return (z * sizeY + y) * sizeX + x; }
 
+    [[nodiscard]] std::span<const uint32_t> offsets() const noexcept { return offsets_; }
+    [[nodiscard]] std::span<uint32_t> offsets() noexcept { return offsets_; }
+
+    [[nodiscard]] std::span<const uint32_t> atomsInCells() const noexcept { return atomsInCells_; }
+    [[nodiscard]] std::span<uint32_t> atomsInCells() noexcept { return atomsInCells_; }
+
+    [[nodiscard]] std::span<const uint32_t> counts() const noexcept { return counts_; }
+    [[nodiscard]] std::span<uint32_t> counts() noexcept { return counts_; }
+
 private:
     static constexpr int kGhostLayers = 1;
 
     // CSR хранение данных
-    std::vector<uint32_t> offsets;      // массив оффсетов (каждый оффсет - начало новой ячейки)
-    std::vector<uint32_t> atomsInCells; // атомы подряд сгруппированные по ячейкам
+    std::vector<uint32_t> offsets_;      // массив оффсетов (каждый оффсет - начало новой ячейки)
+    std::vector<uint32_t> atomsInCells_; // атомы подряд сгруппированные по ячейкам
     std::array<int, 27> neighborOffsets27_{};
 
     // рабочие буферы rebuild — переиспользуются между вызовами

@@ -10,38 +10,13 @@
 
 GpuVerletCorrect::GpuVerletCorrect() { buildPipeline(); }
 
-void GpuVerletCorrect::release() {
-    auto destroyBuf = [](wgpu::Buffer& b) {
-        if (b) {
-            b.destroy();
-            b = nullptr;
-        }
-    };
-    destroyBuf(uniformBuffer_);
-    if (pipeline_) {
-        pipeline_.release();
-        pipeline_ = nullptr;
-    }
-    if (pipelineLayout_) {
-        pipelineLayout_.release();
-        pipelineLayout_ = nullptr;
-    }
-    if (bindGroupLayout_) {
-        bindGroupLayout_.release();
-        bindGroupLayout_ = nullptr;
-    }
-    if (shaderModule_) {
-        shaderModule_.release();
-        shaderModule_ = nullptr;
-    }
-}
-
 void GpuVerletCorrect::buildPipeline() {
     WGPUShaderSourceWGSL wgslDesc{};
     wgslDesc.chain.sType = WGPUSType_ShaderSourceWGSL;
     wgslDesc.code = wgpu::StringView(verlet_correctWGSL);
 
     wgpu::ShaderModuleDescriptor smDesc{};
+    smDesc.label = wgpu::StringView("VerletCorrectShader");
     smDesc.nextInChain = &wgslDesc.chain;
     shaderModule_ = WGPUContext::instance().device().createShaderModule(smDesc);
 
@@ -67,6 +42,7 @@ void GpuVerletCorrect::buildPipeline() {
     bglEntries[4] = makeStorageEntry(4, wgpu::BufferBindingType::ReadOnlyStorage);
 
     wgpu::BindGroupLayoutDescriptor bglDesc{};
+    bglDesc.label = wgpu::StringView("VerletCorrect_BindGroupLayout");
     bglDesc.entryCount = static_cast<uint32_t>(bglEntries.size());
     bglDesc.entries = bglEntries.data();
     bindGroupLayout_ = WGPUContext::instance().device().createBindGroupLayout(bglDesc);
@@ -75,12 +51,14 @@ void GpuVerletCorrect::buildPipeline() {
     WGPUBindGroupLayout rawBGL = bindGroupLayout_;
 
     wgpu::PipelineLayoutDescriptor plDesc{};
+    plDesc.label = wgpu::StringView("VerletCorrect_PipelineLayout");
     plDesc.bindGroupLayoutCount = 1;
     plDesc.bindGroupLayouts = &rawBGL;
     pipelineLayout_ = WGPUContext::instance().device().createPipelineLayout(plDesc);
 
     // 4. Compute pipeline
     wgpu::ComputePipelineDescriptor cpDesc{};
+    cpDesc.label = wgpu::StringView("VerletCorrect_Pipeline");
     cpDesc.layout = pipelineLayout_;
     cpDesc.compute.module = shaderModule_;
     cpDesc.compute.entryPoint = wgpu::StringView("main");
@@ -120,6 +98,7 @@ wgpu::BindGroup GpuVerletCorrect::makeBindGroup(GpuAtomBuffers& buffers) const {
     entries[4] = makeStorageBE(4, buffers.bufInvMass(), f32Bytes);
 
     wgpu::BindGroupDescriptor bgDesc{};
+    bgDesc.label = wgpu::StringView("VerletCorrect_BindGroup");
     bgDesc.layout = bindGroupLayout_;
     bgDesc.entryCount = static_cast<uint32_t>(entries.size());
     bgDesc.entries = entries.data();
@@ -145,7 +124,7 @@ void GpuVerletCorrect::dispatch(GpuAtomBuffers& buffers, uint32_t atomCount, flo
     wgpu::CommandEncoder enc = WGPUContext::instance().device().createCommandEncoder({});
     {
         wgpu::ComputePassDescriptor passDesc{};
-        passDesc.label = wgpu::StringView("VerletCorrect");
+        passDesc.label = wgpu::StringView("VerletCorrect pass");
         wgpu::ComputePassEncoder pass = enc.beginComputePass(passDesc);
 
         pass.setPipeline(pipeline_);

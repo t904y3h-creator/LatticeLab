@@ -5,10 +5,11 @@
 #include "GUI/interface/panels/debug/DebugPanel.h"
 #include "GUI/interface/panels/debug/view/DebugView.h"
 
+// clang-format off
 namespace {
     static DebugView* buildDebugSimView(DebugPanel& panel) {
         return panel.addView(DebugView("Симуляция", {
-            DebugValue("Память (МБ)", DebugDrawers::Float<2>),
+            DebugSeries("Память (МБ)"),
             DebugValue("Рендер (мс)", DebugDrawers::Float<4>),
             DebugValue("Физика (мс)", DebugDrawers::Float<4>),
             DebugValue("Тип интегратора", DebugDrawers::String),
@@ -67,6 +68,7 @@ namespace {
             DebugValue("SG ср. атомов/ячейку", DebugDrawers::Float<3>),
         }));
     }
+    // clang-format on
 
     static DebugView* buildDebugProfilerView(DebugPanel& panel) { return panel.addView(DebugView("Profiler", drawProfilerTreeView)); }
 }

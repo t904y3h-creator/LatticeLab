@@ -1,3 +1,5 @@
 file(READ ${INPUT_FILE} CONTENT)
-file(WRITE ${OUTPUT_FILE} "static const char* ${VAR_NAME} = R\"(\n${CONTENT}\n)\";\n")
+file(WRITE ${OUTPUT_FILE} "#pragma once\n")
+file(APPEND ${OUTPUT_FILE} "#include <string_view>\n")
+file(APPEND ${OUTPUT_FILE} "inline constexpr std::string_view ${VAR_NAME} = R\"(\n${CONTENT}\n)\";")
 message(STATUS "Generated WGSL header: ${OUTPUT_FILE}")

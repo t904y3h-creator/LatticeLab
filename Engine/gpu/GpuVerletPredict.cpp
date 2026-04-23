@@ -13,45 +13,15 @@
 
 GpuVerletPredict::GpuVerletPredict() { buildPipeline(); }
 
-void GpuVerletPredict::release() {
-    if (uniformBuffer_) {
-        uniformBuffer_.destroy();
-        uniformBuffer_ = nullptr;
-    }
-    if (pipeline_) {
-        pipeline_.release();
-        pipeline_ = nullptr;
-    }
-    if (pipelineLayout_) {
-        pipelineLayout_.release();
-        pipelineLayout_ = nullptr;
-    }
-    if (bindGroupLayout_) {
-        bindGroupLayout_.release();
-        bindGroupLayout_ = nullptr;
-    }
-    if (shaderModule_) {
-        shaderModule_.release();
-        shaderModule_ = nullptr;
-    }
-}
-
 void GpuVerletPredict::buildPipeline() {
-    // 1. Shader module ──────────────────────────────────────────────────────
     WGPUShaderSourceWGSL wgslDesc{};
     wgslDesc.chain.sType = WGPUSType_ShaderSourceWGSL;
     wgslDesc.code = wgpu::StringView(verlet_predictWGSL);
 
     wgpu::ShaderModuleDescriptor smDesc{};
+    smDesc.label = wgpu::StringView("VerletPredictShader");
     smDesc.nextInChain = &wgslDesc.chain;
     shaderModule_ = WGPUContext::instance().device().createShaderModule(smDesc);
-
-    // 2. Bind group layout ──────────────────────────────────────────────────
-    //    binding 0 — pos       (storage, read_write)
-    //    binding 1 — vel       (storage, read)
-    //    binding 2 — force     (storage, read)
-    //    binding 3 — inv_mass  (storage, read)
-    //    binding 4 — uniforms  (uniform)
 
     std::array<wgpu::BindGroupLayoutEntry, 5> bglEntries{};
 
@@ -75,6 +45,7 @@ void GpuVerletPredict::buildPipeline() {
     bglEntries[4] = makeStorageEntry(4, wgpu::BufferBindingType::ReadOnlyStorage);
 
     wgpu::BindGroupLayoutDescriptor bglDesc{};
+    bglDesc.label = wgpu::StringView("VerletPredict_BindGroupLayout");
     bglDesc.entryCount = static_cast<uint32_t>(bglEntries.size());
     bglDesc.entries = bglEntries.data();
     bindGroupLayout_ = WGPUContext::instance().device().createBindGroupLayout(bglDesc);
@@ -82,11 +53,13 @@ void GpuVerletPredict::buildPipeline() {
     WGPUBindGroupLayout rawBGL = bindGroupLayout_;
 
     wgpu::PipelineLayoutDescriptor plDesc{};
+    plDesc.label = wgpu::StringView("VerletPredict_PipelineLayout");
     plDesc.bindGroupLayoutCount = 1;
     plDesc.bindGroupLayouts = &rawBGL;
     pipelineLayout_ = WGPUContext::instance().device().createPipelineLayout(plDesc);
 
     wgpu::ComputePipelineDescriptor cpDesc{};
+    cpDesc.label = wgpu::StringView("VerletPredict_Pipeline");
     cpDesc.layout = pipelineLayout_;
     cpDesc.compute.module = shaderModule_;
     cpDesc.compute.entryPoint = wgpu::StringView("main");
@@ -126,16 +99,13 @@ wgpu::BindGroup GpuVerletPredict::makeBindGroup(GpuAtomBuffers& buffers) const {
     entries[4] = makeStorageBE(4, buffers.bufInvMass(), f32Bytes);
 
     wgpu::BindGroupDescriptor bgDesc{};
+    bgDesc.label = wgpu::StringView("VerletPredict_BindGroup");
     bgDesc.layout = bindGroupLayout_;
     bgDesc.entryCount = static_cast<uint32_t>(entries.size());
     bgDesc.entries = entries.data();
 
     return WGPUContext::instance().device().createBindGroup(bgDesc);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// dispatch — основной публичный метод
-// ─────────────────────────────────────────────────────────────────────────────
 
 void GpuVerletPredict::dispatch(GpuAtomBuffers& buffers, uint32_t atomCount, float dt) {
     assert(isReady());
@@ -150,14 +120,12 @@ void GpuVerletPredict::dispatch(GpuAtomBuffers& buffers, uint32_t atomCount, flo
 
     WGPUContext::instance().queue().writeBuffer(uniformBuffer_, 0, &uni, sizeof(uni));
 
-    // Создаём bind group под текущие буферы.
     wgpu::BindGroup bindGroup = makeBindGroup(buffers);
 
-    // Кодируем и отправляем compute-pass.
     wgpu::CommandEncoder enc = WGPUContext::instance().device().createCommandEncoder({});
     {
         wgpu::ComputePassDescriptor passDesc{};
-        passDesc.label = wgpu::StringView("VerletPredict");
+        passDesc.label = wgpu::StringView("VerletPredict pass");
         wgpu::ComputePassEncoder pass = enc.beginComputePass(passDesc);
 
         pass.setPipeline(pipeline_);

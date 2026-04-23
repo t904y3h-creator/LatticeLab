@@ -8,21 +8,22 @@
 #include "App/interaction/ToolsManager.h"
 
 namespace {
-    wgpu::ShaderModule createShaderModule(wgpu::Device device, const char* wgsl) {
+    wgpu::ShaderModule createShaderModule(wgpu::Device device, std::string_view wgsl, std::string_view label) {
         WGPUShaderSourceWGSL wgslDesc{};
         wgslDesc.chain.sType = WGPUSType_ShaderSourceWGSL;
-        wgslDesc.code = {wgsl, WGPU_STRLEN};
+        wgslDesc.code = wgpu::StringView(wgsl);
 
         wgpu::ShaderModuleDescriptor desc{};
+        desc.label = wgpu::StringView(label);
         desc.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&wgslDesc);
         return device.createShaderModule(desc);
     }
-
 }
 
 RendererWGPU::RendererWGPU(SimBox& simbox, wgpu::Device device, wgpu::TextureFormat surfaceFormat)
     : IRenderer(simbox), device(device), surfaceFormat(surfaceFormat) {
-    wgpu::BufferDescriptor desc;
+    wgpu::BufferDescriptor desc{};
+    desc.label = wgpu::StringView("RenderUniformBuffer");
     desc.size = sizeof(SceneUniforms);
     desc.usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst;
     uniformBuffer = device.createBuffer(desc);
@@ -43,28 +44,28 @@ void RendererWGPU::initAtomColors() {
     }
 }
 
-wgpu::Buffer RendererWGPU::createBuffer(uint64_t size, wgpu::BufferUsage usage, wgpu::StringView label) {
-    wgpu::BufferDescriptor desc;
-    desc.label = label;
+wgpu::Buffer RendererWGPU::createBuffer(uint64_t size, wgpu::BufferUsage usage, std::string_view label) {
+    wgpu::BufferDescriptor desc{};
+    desc.label = wgpu::StringView(label);
     desc.size = size;
     desc.usage = usage;
     return device.createBuffer(desc);
 }
 
 void RendererWGPU::initAtomQuadBuffer() {
-    static constexpr float quad[] = {
+    constexpr float quad[] = {
         -1.f, -1.f, 1.f, -1.f, 1.f, 1.f, -1.f, -1.f, 1.f, 1.f, -1.f, 1.f,
     };
-    atomQuadVb = createBuffer(sizeof(quad), wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst, wgpu::StringView("Atom_Quad_Geometry"));
+    atomQuadVb = createBuffer(sizeof(quad), wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst, "AtomQuadGeometry");
     device.getQueue().writeBuffer(atomQuadVb, 0, quad, sizeof(quad));
 }
 
 void RendererWGPU::initBoxBuffer() {
-    boxVb = createBuffer(24 * 3 * sizeof(float), wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst, wgpu::StringView("Box_Geometry"));
+    boxVb = createBuffer(24 * 3 * sizeof(float), wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst, "BoxGeometry");
 }
 
 void RendererWGPU::initBondBuffer() {
-    bondVb = createBuffer(128, wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst);
+    bondVb = createBuffer(128, wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst, "BondGeometry");
     bondVbCapacity_ = 128;
 }
 
@@ -73,13 +74,12 @@ void RendererWGPU::initGridLineBuffer() {
         0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1,
         1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 1,
     };
-    gridLineVb =
-        createBuffer(sizeof(lines), wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst, wgpu::StringView("Grid_Cell_Unit_Lines"));
+    gridLineVb = createBuffer(sizeof(lines), wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst, "GridCellUnitLines");
     device.getQueue().writeBuffer(gridLineVb, 0, lines, sizeof(lines));
 }
 
-void RendererWGPU::initAtomPipeline(const char* atomWGSL) {
-    wgpu::ShaderModule shader = createShaderModule(device, atomWGSL);
+void RendererWGPU::initAtomPipeline(std::string_view atomWGSL) {
+    wgpu::ShaderModule shader = createShaderModule(device, atomWGSL, "AtomShader");
 
     std::array<wgpu::BindGroupLayoutEntry, 6> entries;
     entries[0].binding = 0;
@@ -137,7 +137,7 @@ void RendererWGPU::initAtomPipeline(const char* atomWGSL) {
     depthState.depthWriteEnabled = wgpu::OptionalBool::True;
     depthState.depthCompare = wgpu::CompareFunction::Less;
 
-    wgpu::RenderPipelineDescriptor pDesc;
+    wgpu::RenderPipelineDescriptor pDesc{};
     pDesc.label = wgpu::StringView("AtomPipeline");
     pDesc.layout = pipelineLayout;
     pDesc.vertex.module = shader;
@@ -154,8 +154,8 @@ void RendererWGPU::initAtomPipeline(const char* atomWGSL) {
     atomPipeline = device.createRenderPipeline(pDesc);
 }
 
-void RendererWGPU::initLinePipeline(wgpu::RenderPipeline& outPipeline, const char* wgsl) {
-    wgpu::ShaderModule shader = createShaderModule(device, wgsl);
+void RendererWGPU::initLinePipeline(wgpu::RenderPipeline& outPipeline, std::string_view wgsl) {
+    wgpu::ShaderModule shader = createShaderModule(device, wgsl, "LineShader");
 
     wgpu::BindGroupLayoutEntry uboEntry{};
     uboEntry.binding = 0;
@@ -218,8 +218,8 @@ void RendererWGPU::initLinePipeline(wgpu::RenderPipeline& outPipeline, const cha
     lineBindGroupLayout = bgl;
 }
 
-void RendererWGPU::initGridPipeline(const char* gridWGSL) {
-    auto shader = createShaderModule(device, gridWGSL);
+void RendererWGPU::initGridPipeline(std::string_view gridWGSL) {
+    auto shader = createShaderModule(device, gridWGSL, "GridShader");
 
     wgpu::BindGroupLayoutEntry uboEntry{};
     uboEntry.binding = 0;
@@ -307,8 +307,8 @@ void RendererWGPU::initGridPipeline(const char* gridWGSL) {
     gridBindGroupLayout = bgl;
 }
 
-void RendererWGPU::initBoxPipeline(const char* boxWGSL) { initLinePipeline(boxPipeline, boxWGSL); }
-void RendererWGPU::initBondPipeline(const char* bondWGSL) { initLinePipeline(bondPipeline, bondWGSL); }
+void RendererWGPU::initBoxPipeline(std::string_view boxWGSL) { initLinePipeline(boxPipeline, boxWGSL); }
+void RendererWGPU::initBondPipeline(std::string_view bondWGSL) { initLinePipeline(bondPipeline, bondWGSL); }
 
 void RendererWGPU::ensureStorageBuffers(size_t count) {
     if (count <= sbCapacity_) {
@@ -319,11 +319,11 @@ void RendererWGPU::ensureStorageBuffers(size_t count) {
     const uint64_t f32Bytes = count * sizeof(float);
     const auto usage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst;
 
-    sbPos = createBuffer(vec4Bytes, usage, wgpu::StringView("Atoms_Pos"));
-    sbVel = createBuffer(vec4Bytes, usage, wgpu::StringView("Atoms_Vel"));
-    sbType = createBuffer(f32Bytes, usage, wgpu::StringView("Atoms_Type"));
-    sbRadius = createBuffer(f32Bytes, usage, wgpu::StringView("Atoms_Radius"));
-    sbSel = createBuffer(f32Bytes, usage, wgpu::StringView("Atoms_Selection"));
+    sbPos = createBuffer(vec4Bytes, usage, "AtomsPos");
+    sbVel = createBuffer(vec4Bytes, usage, "AtomsVel");
+    sbType = createBuffer(f32Bytes, usage, "AtomsType");
+    sbRadius = createBuffer(f32Bytes, usage, "AtomsRadius");
+    sbSel = createBuffer(f32Bytes, usage, "AtomsSelection");
     sbCapacity_ = count;
 
     std::array<wgpu::BindGroupEntry, 6> entries{};
@@ -377,10 +377,6 @@ void RendererWGPU::drawShot(wgpu::TextureView targetView, wgpu::TextureView dept
 
     device.getQueue().writeBuffer(uniformBuffer, 0, &uniforms, sizeof(uniforms));
 
-    wgpu::CommandEncoderDescriptor encDesc;
-    encDesc.label = wgpu::StringView("RendererWGPU::drawShot encoder");
-    currentEncoder = device.createCommandEncoder(encDesc);
-
     wgpu::RenderPassColorAttachment colorAtt;
     colorAtt.view = currentTargetView;
     colorAtt.loadOp = wgpu::LoadOp::Clear;
@@ -395,12 +391,15 @@ void RendererWGPU::drawShot(wgpu::TextureView targetView, wgpu::TextureView dept
     depthAtt.stencilLoadOp = wgpu::LoadOp::Undefined;
     depthAtt.stencilStoreOp = wgpu::StoreOp::Undefined;
 
-    wgpu::RenderPassDescriptor passDesc;
+    wgpu::RenderPassDescriptor passDesc{};
     passDesc.label = wgpu::StringView("RendererWGPU::drawShot pass");
     passDesc.colorAttachmentCount = 1;
     passDesc.colorAttachments = &colorAtt;
     passDesc.depthStencilAttachment = &depthAtt;
 
+    wgpu::CommandEncoderDescriptor encDesc{};
+    encDesc.label = wgpu::StringView("RendererWGPU::drawShot encoder");
+    currentEncoder = device.createCommandEncoder(encDesc);
     currentPass = currentEncoder.beginRenderPass(passDesc);
 
     if (drawBonds) {
@@ -490,11 +489,12 @@ void RendererWGPU::drawBoxImpl(const SimBox& box) {
     entry.buffer = uniformBuffer;
     entry.size = sizeof(SceneUniforms);
 
-    wgpu::BindGroupDescriptor bgDesc;
+    wgpu::BindGroupDescriptor bgDesc{};
+    bgDesc.label = wgpu::StringView("BoxBindGroup");
     bgDesc.layout = lineBindGroupLayout;
     bgDesc.entryCount = 1;
     bgDesc.entries = &entry;
-    auto bg = device.createBindGroup(bgDesc);
+    wgpu::BindGroup bg = device.createBindGroup(bgDesc);
 
     currentPass.setPipeline(boxPipeline);
     currentPass.setBindGroup(0, bg, 0, nullptr);
@@ -524,7 +524,7 @@ void RendererWGPU::drawBondsImpl(const AtomStorage& atoms, const Bond::List& bon
 
     const uint64_t bytes = verts.size() * sizeof(glm::vec3);
     if (bytes > bondVbCapacity_) {
-        bondVb = createBuffer(bytes * 2, wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst);
+        bondVb = createBuffer(bytes * 2, wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst, "BondGeometry");
         bondVbCapacity_ = bytes * 2;
     }
     device.getQueue().writeBuffer(bondVb, 0, verts.data(), bytes);
@@ -534,7 +534,8 @@ void RendererWGPU::drawBondsImpl(const AtomStorage& atoms, const Bond::List& bon
     entry.buffer = uniformBuffer;
     entry.size = sizeof(SceneUniforms);
 
-    wgpu::BindGroupDescriptor bgDesc;
+    wgpu::BindGroupDescriptor bgDesc{};
+    bgDesc.label = wgpu::StringView("BondBindGroup");
     bgDesc.layout = lineBindGroupLayout;
     bgDesc.entryCount = 1;
     bgDesc.entries = &entry;
@@ -571,7 +572,7 @@ void RendererWGPU::drawGridImpl(const SpatialGrid& grid) {
 
     const uint64_t instBytes = gridData.size() * sizeof(GridInstance);
     if (!gridInstVb || instBytes > gridInstVbCapacity_) {
-        gridInstVb = createBuffer(instBytes * 2, wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst);
+        gridInstVb = createBuffer(instBytes * 2, wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst, "GridInstanceGeometry");
         gridInstVbCapacity_ = instBytes * 2;
     }
     device.getQueue().writeBuffer(gridInstVb, 0, gridData.data(), instBytes);
@@ -581,7 +582,8 @@ void RendererWGPU::drawGridImpl(const SpatialGrid& grid) {
     entry.buffer = uniformBuffer;
     entry.size = sizeof(SceneUniforms);
 
-    wgpu::BindGroupDescriptor bgDesc;
+    wgpu::BindGroupDescriptor bgDesc{};
+    bgDesc.label = wgpu::StringView("GridBindGroup");
     bgDesc.layout = gridBindGroupLayout;
     bgDesc.entryCount = 1;
     bgDesc.entries = &entry;

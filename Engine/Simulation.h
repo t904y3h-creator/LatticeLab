@@ -120,6 +120,8 @@ public:
     }
     void clear();
 
+    GpuAtomBuffers& gpuAtomBuffers() { return gpuBufs_; }
+
 private:
     friend class SimulationStateIO;
     StepData makeStepData();

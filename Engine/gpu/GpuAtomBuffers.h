@@ -18,18 +18,16 @@ public:
     // Вызывать при изменении capacity в AtomStorage.
     void resize(size_t capacity);
 
-    void release();
-
     size_t capacity() const { return capacity_; }
 
-    // ── Upload CPU → GPU ────────────────────────────────────────────────────
+    // Upload CPU → GPU
     void uploadPositions(const AtomStorage& s, size_t count);
     void uploadVelocities(const AtomStorage& s, size_t count);
     void uploadForces(const AtomStorage& s, size_t count);
     void uploadPrevForces(const AtomStorage& s, size_t count);
     void uploadInvMass(const AtomStorage& s, size_t count);
 
-    // ── Download GPU → CPU (блокирующий) ───────────────────────────────────
+    // Download GPU → CPU (блокирующий)
     void downloadPositions(AtomStorage& s, size_t count);
     void downloadVelocities(AtomStorage& s, size_t count);
 
@@ -40,7 +38,7 @@ public:
     wgpu::Buffer bufInvMass() const { return bufInvMass_; }
 
 private:
-    wgpu::Buffer makeStorageBuffer(size_t bytes, const char* label);
+    wgpu::Buffer makeStorageBuffer(size_t bytes, std::string_view label);
 
     // Упаковка SoA (xs, ys, zs) → interleaved vec4 и запись в buf.
     void uploadVec4(wgpu::Buffer buf, const float* xs, const float* ys, const float* zs, size_t count);
