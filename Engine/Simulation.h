@@ -5,6 +5,7 @@
 #include "Engine/NeighborSearch/NeighborList.h"
 #include "Engine/SimBox.h"
 #include "Engine/gpu/GpuAtomBuffers.h"
+#include "Engine/gpu/GpuStepOps.h"
 #include "Engine/gpu/GpuVerletCorrect.h"
 #include "Engine/gpu/GpuVerletPredict.h"
 #include "Engine/math/Vec3.h"
@@ -147,4 +148,5 @@ private:
 
     GpuVerletPredict gpuVerletPredict_;
     GpuVerletCorrect gpuVerletCorrect_;
+    GpuStepOps gpuStepOps_;
 };

@@ -5,6 +5,7 @@
 #include "Engine/io/SimulationStateIO.h"
 #include "Engine/metrics/Profiler.h"
 #include "Engine/physics/Bond.h"
+#include "Engine/physics/integrators/StepOps.h"
 
 Simulation::Simulation(SimBox& box) : sim_box_(box), integrator() {
     atomStorage_.reserve(250000);
@@ -17,6 +18,7 @@ void Simulation::enableGpu(bool enable) {
     auto& schemeVar = integrator.getSchemeImpl();
 
     if (auto* scheme = std::get_if<VerletScheme>(&schemeVar)) {
+        StepOps::init(&gpuBufs_, &gpuStepOps_);
         if (enable && gpuVerletPredict_.isReady() && gpuVerletCorrect_.isReady()) {
             scheme->initGpu(&gpuBufs_, &gpuVerletPredict_, &gpuVerletCorrect_);
         }
