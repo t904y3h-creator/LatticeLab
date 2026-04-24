@@ -69,7 +69,7 @@ private:
     Vec2f dragStartCameraPos;
 
     Mode mode = Mode::Mode2D;
-    World& simBox;
+    World& world;
 
     // Orbit / Free
     float azimuth = 0.f;

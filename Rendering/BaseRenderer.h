@@ -4,12 +4,8 @@
 
 #include <webgpu/webgpu.hpp>
 
-#include "Engine/SimBox.h"
-#include "Engine/physics/AtomStorage.h"
-#include "Engine/physics/Bond.h"
+#include "Engine/World.h"
 #include "Rendering/camera/Camera.h"
-
-class GpuAtomBuffers;
 
 class IRenderer {
 public:
@@ -21,8 +17,7 @@ public:
 
     virtual ~IRenderer() = default;
 
-    virtual void drawShot(wgpu::TextureView targetView, wgpu::TextureView depthView, const AtomStorage& atoms, const Bond::List& bonds,
-                          const World& box, const GpuAtomBuffers& atomBuffers) = 0;
+    virtual void drawShot(wgpu::TextureView targetView, wgpu::TextureView depthView, const World& box) = 0;
     virtual void endFrame() = 0;
 
     bool drawGrid = false;
