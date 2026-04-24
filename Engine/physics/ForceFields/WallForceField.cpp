@@ -1,6 +1,6 @@
 #include "WallForceField.h"
 
-void WallForceField::syncWalls(const SimBox& box) {
+void WallForceField::syncWalls(const World& box) {
     wallMaxX_ = box.size.x - 1.0f;
     wallMaxY_ = box.size.y - 1.0f;
     wallMaxZ_ = box.size.z - 1.0f;

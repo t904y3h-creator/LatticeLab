@@ -4,7 +4,7 @@
 
 class Renderer3DWGPU : public RendererWGPU {
 public:
-    Renderer3DWGPU(SimBox& simbox, wgpu::Device device, wgpu::TextureFormat surfaceFormat);
+    Renderer3DWGPU(World& simbox, wgpu::Device device, wgpu::TextureFormat surfaceFormat, const GpuAtomBuffers& atomBuffers);
     ~Renderer3DWGPU() override = default;
 
 protected:

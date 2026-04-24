@@ -6,6 +6,7 @@
 #include <webgpu/webgpu.hpp>
 
 #include "App/interaction/ToolsManager.h"
+#include "Engine/gpu/GpuAtomBuffers.h"
 
 namespace {
     wgpu::ShaderModule createShaderModule(wgpu::Device device, std::string_view wgsl, std::string_view label) {
@@ -20,8 +21,11 @@ namespace {
     }
 }
 
-RendererWGPU::RendererWGPU(SimBox& simbox, wgpu::Device device, wgpu::TextureFormat surfaceFormat)
+RendererWGPU::RendererWGPU(World& simbox, wgpu::Device device, wgpu::TextureFormat surfaceFormat, const GpuAtomBuffers& atomBuffers)
     : IRenderer(simbox), device(device), surfaceFormat(surfaceFormat) {
+    sbPos = atomBuffers.bufPos();
+    sbVel = atomBuffers.bufVel();
+
     wgpu::BufferDescriptor desc{};
     desc.label = wgpu::StringView("RenderUniformBuffer");
     desc.size = sizeof(SceneUniforms);
@@ -315,12 +319,15 @@ void RendererWGPU::ensureStorageBuffers(size_t count) {
         return;
     }
 
-    const uint64_t vec4Bytes = count * sizeof(AtomVec4);
+    if (!sbPos || !sbVel) {
+        std::cerr << "Renderer Error: sbPos or sbVel is NULL before createBindGroup!" << std::endl;
+        return;
+    }
+
+    const uint64_t vec4Bytes = count * 4 * sizeof(float);
     const uint64_t f32Bytes = count * sizeof(float);
     const auto usage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst;
 
-    sbPos = createBuffer(vec4Bytes, usage, "AtomsPos");
-    sbVel = createBuffer(vec4Bytes, usage, "AtomsVel");
     sbType = createBuffer(f32Bytes, usage, "AtomsType");
     sbRadius = createBuffer(f32Bytes, usage, "AtomsRadius");
     sbSel = createBuffer(f32Bytes, usage, "AtomsSelection");
@@ -359,7 +366,10 @@ template <typename T> void RendererWGPU::uploadStorageBuffer(wgpu::Buffer& buf, 
 }
 
 void RendererWGPU::drawShot(wgpu::TextureView targetView, wgpu::TextureView depthView, const AtomStorage& atoms, const Bond::List& bonds,
-                            const SimBox& box) {
+                            const World& box, const GpuAtomBuffers& atomBuffers) {
+    sbPos = atomBuffers.bufPos();
+    sbVel = atomBuffers.bufVel();
+
     currentTargetView = targetView;
     currentDepthView = depthView;
     updateMatrices();
@@ -428,15 +438,11 @@ void RendererWGPU::drawAtomsImpl(const AtomStorage& atoms) {
 
     ensureStorageBuffers(count);
 
-    posData_.resize(count);
-    velData_.resize(count);
     radii.resize(count);
     typeData.resize(count);
     selectedData.resize(count);
 
     for (size_t i = 0; i < count; ++i) {
-        posData_[i] = {atoms.xData()[i], atoms.yData()[i], atoms.zData()[i]};
-        velData_[i] = {atoms.vxData()[i], atoms.vyData()[i], atoms.vzData()[i]};
         radii[i] = AtomData::getProps(atoms.type(i)).radius;
         typeData[i] = static_cast<float>(atoms.type(i));
     }
@@ -450,8 +456,6 @@ void RendererWGPU::drawAtomsImpl(const AtomStorage& atoms) {
         selectedData[idx] = idx < count ? 1.f : 0.f;
     }
 
-    uploadStorageBuffer(sbPos, posData_.data(), count);
-    uploadStorageBuffer(sbVel, velData_.data(), count);
     uploadStorageBuffer(sbRadius, radii.data(), count);
     uploadStorageBuffer(sbType, typeData.data(), count);
     uploadStorageBuffer(sbSel, selectedData.data(), count);
@@ -475,7 +479,7 @@ void RendererWGPU::drawAtomsImpl(const AtomStorage& atoms) {
     currentPass.draw(6, count, 0, 0);
 }
 
-void RendererWGPU::drawBoxImpl(const SimBox& box) {
+void RendererWGPU::drawBoxImpl(const World& box) {
     const float x1 = box.size.x, y1 = box.size.y, z1 = box.size.z;
     const float lines[] = {
         0, y1, 0, x1, y1, 0, x1, y1, 0, x1, y1, z1, x1, y1, z1, 0,  y1, z1, 0, y1, z1, 0, y1, 0,

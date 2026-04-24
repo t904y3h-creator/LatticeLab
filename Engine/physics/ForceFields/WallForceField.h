@@ -6,7 +6,7 @@
 
 class WallForceField {
 public:
-    void syncWalls(const SimBox& box);
+    void syncWalls(const World& box);
     void compute(AtomStorage& atoms, const Vec3f& gravity) const;
 
 private:

@@ -21,7 +21,7 @@ public:
     // Перед вызовом в buffers должны быть загружены:
     //   uploadVelocities, uploadForces, uploadPrevForces, uploadInvMass.
     // После вызова скорости обновлены; скачивайте downloadVelocities.
-    void dispatch(GpuAtomBuffers& buffers, uint32_t atomCount, float dt, float accelDamping);
+    void record(wgpu::CommandEncoder& enc, GpuAtomBuffers& buffers, uint32_t atomCount, float dt, float accelDamping);
 
 private:
     void buildPipeline();

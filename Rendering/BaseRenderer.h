@@ -9,6 +9,8 @@
 #include "Engine/physics/Bond.h"
 #include "Rendering/camera/Camera.h"
 
+class GpuAtomBuffers;
+
 class IRenderer {
 public:
     enum class SpeedColorMode : uint8_t {
@@ -20,7 +22,7 @@ public:
     virtual ~IRenderer() = default;
 
     virtual void drawShot(wgpu::TextureView targetView, wgpu::TextureView depthView, const AtomStorage& atoms, const Bond::List& bonds,
-                          const SimBox& box) = 0;
+                          const World& box, const GpuAtomBuffers& atomBuffers) = 0;
     virtual void endFrame() = 0;
 
     bool drawGrid = false;
@@ -32,5 +34,5 @@ public:
     Camera camera;
 
 protected:
-    IRenderer(SimBox& box) : camera(box) {}
+    IRenderer(World& box) : camera(box) {}
 };

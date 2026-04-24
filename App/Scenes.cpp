@@ -9,7 +9,7 @@
 namespace Scenes {
     namespace detail {
         bool hasNeighborInStorage(const Simulation& sim, const Vec3f& coords, float delta) {
-            const SimBox& box = sim.box();
+            const World& box = sim.box();
             const AtomStorage& atoms = sim.atoms();
             const int cx = box.grid.worldToCellX(coords.x);
             const int cy = box.grid.worldToCellY(coords.y);
@@ -76,7 +76,7 @@ namespace Scenes {
 
         std::srand(static_cast<unsigned>(detail::resolveSeed(seed)));
 
-        const SimBox& box = sim.box();
+        const World& box = sim.box();
         const float minDistanceSqr = minDistance * minDistance;
 
         const size_t oldSize = sim.atoms().size();
@@ -135,7 +135,7 @@ namespace Scenes {
         }
 
         if (acceptedPositions.empty()) {
-            sim.neighborList().clear();
+            // sim.neighborList().clear();
             return 0;
         }
 
@@ -145,7 +145,7 @@ namespace Scenes {
             sim.appendAtomFast(pos, is3d ? randomSpeed : Vec3f(randomSpeed.x, randomSpeed.y, 0.0f), type);
         }
 
-        sim.finalizeAtomBatch();
+        // sim.finalizeAtomBatch();
         return static_cast<int>(acceptedPositions.size());
     }
 

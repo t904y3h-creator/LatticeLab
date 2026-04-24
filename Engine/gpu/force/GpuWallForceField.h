@@ -4,23 +4,25 @@
 
 #include <webgpu/webgpu.hpp>
 
+#include "Engine/math/Vec3.h"
+
 class GpuAtomBuffers;
 
-class GpuVerletPredict {
+class GpuWallForceField {
 public:
-    GpuVerletPredict();
+    GpuWallForceField();
 
-    GpuVerletPredict(const GpuVerletPredict&) = delete;
-    GpuVerletPredict& operator=(const GpuVerletPredict&) = delete;
+    GpuWallForceField(const GpuWallForceField&) = delete;
+    GpuWallForceField& operator=(const GpuWallForceField&) = delete;
 
     bool isReady() const { return pipeline_ != nullptr; }
 
-    void record(wgpu::CommandEncoder& enc, GpuAtomBuffers& buffers, uint32_t atomCount, float dt);
+    // wallMax = box.size - Vec3f(1,1,1)  (как syncWalls на CPU)
+    void record(wgpu::CommandEncoder enc, GpuAtomBuffers& atomBufs, uint32_t atomCount, Vec3f wallMax, Vec3f gravity);
 
 private:
     void buildPipeline();
-
-    wgpu::BindGroup makeBindGroup(GpuAtomBuffers& buffers) const;
+    wgpu::BindGroup makeBindGroup(GpuAtomBuffers& atomBufs) const;
 
     wgpu::ShaderModule shaderModule_ = nullptr;
     wgpu::BindGroupLayout bindGroupLayout_ = nullptr;
@@ -28,6 +30,5 @@ private:
     wgpu::ComputePipeline pipeline_ = nullptr;
     wgpu::Buffer uniformBuffer_ = nullptr;
 
-    // Количество потоков в одном workgroup (должно совпадать с шейдером).
     static constexpr uint32_t kWorkgroupSize = 64;
 };

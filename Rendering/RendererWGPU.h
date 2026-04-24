@@ -4,15 +4,16 @@
 
 #include <glm/glm.hpp>
 
+#include "Engine/gpu/GpuAtomBuffers.h"
 #include "Rendering/BaseRenderer.h"
 
 class RendererWGPU : public IRenderer {
 public:
-    RendererWGPU(SimBox& simbox, wgpu::Device device, wgpu::TextureFormat surfaceFormat);
+    RendererWGPU(World& simbox, wgpu::Device device, wgpu::TextureFormat surfaceFormat, const GpuAtomBuffers& atomBuffers);
     ~RendererWGPU() override = default;
 
     void drawShot(wgpu::TextureView targetView, wgpu::TextureView depthView, const AtomStorage& atoms, const Bond::List& bonds,
-                  const SimBox& box) override;
+                  const World& box, const GpuAtomBuffers& atomBuffers) override;
     void endFrame() override;
 
     wgpu::RenderPassEncoder getCurrentPass() { return currentPass; }
@@ -97,7 +98,7 @@ private:
     // Draw
     void drawAtomsImpl(const AtomStorage& atoms);
     void drawBondsImpl(const AtomStorage& atoms, const Bond::List& bonds);
-    void drawBoxImpl(const SimBox& box);
+    void drawBoxImpl(const World& box);
     void drawGridImpl(const SpatialGrid& grid);
 
     // Data
@@ -107,12 +108,6 @@ private:
         float atomCount;
         float pad[2] = {};
     };
-
-    struct AtomVec4 {
-        float x, y, z, pad = 0.f;
-    };
-    std::vector<AtomVec4> posData_;
-    std::vector<AtomVec4> velData_;
 
     std::vector<GridInstance> gridData;
     std::vector<glm::vec4> typeColorsData;

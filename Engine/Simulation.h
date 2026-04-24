@@ -2,9 +2,8 @@
 
 #include <string>
 
-#include "Engine/NeighborSearch/NeighborList.h"
-#include "Engine/SimBox.h"
 #include "Engine/gpu/GpuAtomBuffers.h"
+#include "Engine/gpu/GpuPhysicsPipeline.h"
 #include "Engine/gpu/GpuStepOps.h"
 #include "Engine/gpu/GpuVerletCorrect.h"
 #include "Engine/gpu/GpuVerletPredict.h"
@@ -18,7 +17,7 @@
 
 class Simulation {
 public:
-    Simulation(SimBox& sim_box);
+    Simulation(World& sim_box);
 
     void enableGpu(bool enable);
 
@@ -89,23 +88,31 @@ public:
     bool isCoulombEnabled() const { return forceField_.isCoulombEnabled(); }
     void setGravity(const Vec3f& gravity) { forceField_.setGravity(gravity); }
     Vec3f getGravity() const { return forceField_.getGravity(); }
-    void setNeighborListCutoff(float cutoff) { neighborList_.setCutoff(cutoff); }
-    float getNeighborListCutoff() const { return neighborList_.cutoff(); }
-    void setNeighborListSkin(float skin) { neighborList_.setSkin(skin); }
-    float getNeighborListSkin() const { return neighborList_.skin(); }
-    float getNeighborListRadius() const { return neighborList_.listRadius(); }
+    void setNeighborListCutoff(float cutoff) {
+        // neighborList_.setCutoff(cutoff);
+    }
+    float getNeighborListCutoff() const {
+        // return neighborList_.cutoff();
+    }
+    void setNeighborListSkin(float skin) {
+        // neighborList_.setSkin(skin);
+    }
+    float getNeighborListSkin() const {
+        // return neighborList_.skin();
+    }
+    float getNeighborListRadius() const {
+        //  return neighborList_.listRadius();
+    }
 
     AtomStorage& atoms() {
         invalidateMetricsCache();
         return atomStorage_;
     }
     const AtomStorage& atoms() const { return atomStorage_; }
-    SimBox& box() { return sim_box_; }
-    const SimBox& box() const { return sim_box_; }
+    World& box() { return sim_box_; }
+    const World& box() const { return sim_box_; }
     ForceField& forceField() { return forceField_; }
     const ForceField& forceField() const { return forceField_; }
-    NeighborList& neighborList() { return neighborList_; }
-    const NeighborList& neighborList() const { return neighborList_; }
     Bond::List& bonds() { return bonds_; }
     const Bond::List& bonds() const { return bonds_; }
 
@@ -115,13 +122,9 @@ public:
         atomStorage_.addAtom(startCoords, startSpeed, type, fixed);
         invalidateMetricsCache();
     }
-    void finalizeAtomBatch() {
-        sim_box_.grid.rebuild(atomStorage_.xDataSpan(), atomStorage_.yDataSpan(), atomStorage_.zDataSpan());
-        neighborList_.clear();
-    }
     void clear();
 
-    GpuAtomBuffers& gpuAtomBuffers() { return gpuBufs_; }
+    GpuAtomBuffers& gpuAtomBuffers() { return gpuPipeline_.atomBuffers(); }
 
 private:
     friend class SimulationStateIO;
@@ -129,11 +132,10 @@ private:
     void invalidateMetricsCache() const { metricsCacheValid_ = false; }
     void refreshMetricsCache() const;
 
-    SimBox& sim_box_;
+    World& sim_box_;
     AtomStorage atomStorage_;
     Integrator integrator;
     ForceField forceField_;
-    NeighborList neighborList_;
     Bond::List bonds_;
     float Dt = 0.01f;
     size_t sim_step = 0;
@@ -144,9 +146,5 @@ private:
     mutable bool metricsCacheValid_ = false;
     mutable EnergyMetrics::Snapshot metricsCache_{};
 
-    GpuAtomBuffers gpuBufs_;
-
-    GpuVerletPredict gpuVerletPredict_;
-    GpuVerletCorrect gpuVerletCorrect_;
-    GpuStepOps gpuStepOps_;
+    GpuPhysicsPipeline gpuPipeline_;
 };

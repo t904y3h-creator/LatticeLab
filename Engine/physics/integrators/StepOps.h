@@ -26,9 +26,9 @@ namespace StepOps {
         { fn(storage, dt) } -> std::same_as<void>;
     };
 
-    inline void confineToBox(AtomStorage& atomStorage, SimBox& box) {
+    inline void confineToBox(AtomStorage& atomStorage, World& box) {
         const Vec3f max = box.size - Vec3f(1, 1, 1);
-        gpuStepOps_->dispatchConfine(*gpuBufs_, atomStorage.size(), max.x, max.y, max.z);
+        // gpuStepOps_->dispatchConfine(*gpuBufs_, atomStorage.size(), max.x, max.y, max.z);
 
         // constexpr float restitution = 0.8f;
         // const Vec3f max = box.size - Vec3f(1.0, 1.0, 1.0);
@@ -56,7 +56,7 @@ namespace StepOps {
     }
 
     inline void postProcessVelocities(AtomStorage& atomStorage, float maxSpeed) {
-        gpuStepOps_->dispatchVelCap(*gpuBufs_, atomStorage.size(), maxSpeed);
+        // gpuStepOps_->dispatchVelCap(*gpuBufs_, atomStorage.size(), maxSpeed);
 
         //         const float maxSpeedSqr = maxSpeed * maxSpeed;
         //         float* RESTRICT vx = atomStorage.vxData();

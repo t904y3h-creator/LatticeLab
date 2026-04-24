@@ -26,7 +26,7 @@ void VerletScheme::runGpuPredict(AtomStorage& atoms, float dt) const {
 
     const uint32_t n = static_cast<uint32_t>(atoms.mobileCount());
 
-    if (gpuBufs_->capacity() < atoms.capacity()) {
+    if (gpuBufs_->countAtoms() < atoms.capacity()) {
         gpuBufs_->resize(atoms.capacity());
     }
 
@@ -35,7 +35,7 @@ void VerletScheme::runGpuPredict(AtomStorage& atoms, float dt) const {
     gpuBufs_->uploadForces(atoms, n);
     gpuBufs_->uploadInvMass(atoms, n);
 
-    gpuPredict_->dispatch(*gpuBufs_, n, dt);
+    // gpuPredict_->dispatch(*gpuBufs_, n, dt);
 
     gpuBufs_->downloadPositions(atoms, n);
 }
@@ -52,7 +52,7 @@ void VerletScheme::runGpuCorrect(StepData& stepData) const {
     gpuBufs_->uploadForces(atoms, n);
     gpuBufs_->uploadPrevForces(atoms, n);
 
-    gpuCorrect_->dispatch(*gpuBufs_, n, stepData.dt, stepData.accelDamping);
+    // gpuCorrect_->dispatch(*gpuBufs_, n, stepData.dt, stepData.accelDamping);
 
     gpuBufs_->downloadVelocities(atoms, n);
 }

@@ -148,8 +148,6 @@ wgpu::BindGroup GpuSpatialGrid::makeBindGroup(GpuGridBuffers& gridBufs, wgpu::Bu
     return WGPUContext::instance().device().createBindGroup(bgDesc);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-
 void GpuSpatialGrid::runPass(wgpu::CommandEncoder& enc, wgpu::ComputePipeline pipeline, wgpu::BindGroup bindGroup, uint32_t workgroupsX,
                              std::string_view label) const {
     wgpu::ComputePassDescriptor passDesc{};
@@ -160,10 +158,6 @@ void GpuSpatialGrid::runPass(wgpu::CommandEncoder& enc, wgpu::ComputePipeline pi
     pass.dispatchWorkgroups(workgroupsX, 1, 1);
     pass.end();
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Dispatch — основной публичный метод
-// ─────────────────────────────────────────────────────────────────────────────
 
 void GpuSpatialGrid::dispatch(GpuGridBuffers& gridBufs, wgpu::Buffer bufPos, uint32_t atomCount, const SpatialGrid& grid) {
     assert(isReady());

@@ -117,7 +117,7 @@ void GpuStepOps::buildPipelines() {
 }
 
 wgpu::BindGroup GpuStepOps::makeConfineBindGroup(GpuAtomBuffers& buffers) const {
-    const size_t vec4Bytes = buffers.capacity() * 4 * sizeof(float);
+    const size_t vec4Bytes = buffers.countAtoms() * 4 * sizeof(float);
 
     std::array<wgpu::BindGroupEntry, 3> entries{};
     entries[0].binding = 0;
@@ -143,7 +143,7 @@ wgpu::BindGroup GpuStepOps::makeConfineBindGroup(GpuAtomBuffers& buffers) const 
 }
 
 wgpu::BindGroup GpuStepOps::makeVelCapBindGroup(GpuAtomBuffers& buffers) const {
-    const size_t vec4Bytes = buffers.capacity() * 4 * sizeof(float);
+    const size_t vec4Bytes = buffers.countAtoms() * 4 * sizeof(float);
 
     std::array<wgpu::BindGroupEntry, 2> entries{};
     entries[0].binding = 0;
@@ -163,30 +163,24 @@ wgpu::BindGroup GpuStepOps::makeVelCapBindGroup(GpuAtomBuffers& buffers) const {
     return WGPUContext::instance().device().createBindGroup(d);
 }
 
-void GpuStepOps::dispatchConfine(GpuAtomBuffers& buffers, uint32_t atomCount, float maxX, float maxY, float maxZ) {
+void GpuStepOps::recordConfine(wgpu::CommandEncoder enc, GpuAtomBuffers& buffers, uint32_t atomCount, float maxX, float maxY, float maxZ) {
     assert(isReady());
 
     ConfineUniforms uni{maxX, maxY, maxZ, 0.8f, atomCount, {0, 0, 0}};
     WGPUContext::instance().queue().writeBuffer(ub_confine_, 0, &uni, sizeof(uni));
 
     wgpu::BindGroup bg = makeConfineBindGroup(buffers);
-    wgpu::CommandEncoder enc = WGPUContext::instance().device().createCommandEncoder({});
-    {
-        wgpu::ComputePassDescriptor pd{};
-        pd.label = wgpu::StringView("confine_to_box");
-        auto pass = enc.beginComputePass(pd);
-        pass.setPipeline(pipeline_confine_);
-        pass.setBindGroup(0, bg, 0, nullptr);
-        pass.dispatchWorkgroups((atomCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
-        pass.end();
-        pass.release();
-    }
-    wgpu::CommandBuffer cmd = enc.finish({});
-    WGPUContext::instance().queue().submit(1, &cmd);
-    WGPUContext::instance().processEvents();
+
+    wgpu::ComputePassDescriptor pd{};
+    pd.label = wgpu::StringView("confine_to_box pass");
+    auto pass = enc.beginComputePass(pd);
+    pass.setPipeline(pipeline_confine_);
+    pass.setBindGroup(0, bg, 0, nullptr);
+    pass.dispatchWorkgroups((atomCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
+    pass.end();
 }
 
-void GpuStepOps::dispatchVelCap(GpuAtomBuffers& buffers, uint32_t atomCount, float maxSpeed) {
+void GpuStepOps::recordVelCap(wgpu::CommandEncoder enc, GpuAtomBuffers& buffers, uint32_t atomCount, float maxSpeed) {
     assert(isReady());
     assert(maxSpeed > 0.0f);
 
@@ -194,18 +188,12 @@ void GpuStepOps::dispatchVelCap(GpuAtomBuffers& buffers, uint32_t atomCount, flo
     WGPUContext::instance().queue().writeBuffer(ub_velcap_, 0, &uni, sizeof(uni));
 
     wgpu::BindGroup bg = makeVelCapBindGroup(buffers);
-    wgpu::CommandEncoder enc = WGPUContext::instance().device().createCommandEncoder({});
-    {
-        wgpu::ComputePassDescriptor pd{};
-        pd.label = wgpu::StringView("post_process_vel");
-        auto pass = enc.beginComputePass(pd);
-        pass.setPipeline(pipeline_velcap_);
-        pass.setBindGroup(0, bg, 0, nullptr);
-        pass.dispatchWorkgroups((atomCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
-        pass.end();
-        pass.release();
-    }
-    wgpu::CommandBuffer cmd = enc.finish({});
-    WGPUContext::instance().queue().submit(1, &cmd);
-    WGPUContext::instance().processEvents();
+
+    wgpu::ComputePassDescriptor pd{};
+    pd.label = wgpu::StringView("post_process_vel pass");
+    auto pass = enc.beginComputePass(pd);
+    pass.setPipeline(pipeline_velcap_);
+    pass.setBindGroup(0, bg, 0, nullptr);
+    pass.dispatchWorkgroups((atomCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
+    pass.end();
 }

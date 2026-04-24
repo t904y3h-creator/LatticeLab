@@ -7,7 +7,7 @@
 
 #include "Engine/SimBox.h"
 
-Camera::Camera(SimBox& simBox, float moveSpeed, float zoomSpeed)
+Camera::Camera(World& simBox, float moveSpeed, float zoomSpeed)
     : simBox(simBox), moveSpeed(moveSpeed), zoomSpeed(zoomSpeed), isDragging(false), lastMousePos(0, 0) {}
 
 void Camera::resetView() {

@@ -18,7 +18,7 @@ void AddAtomTool::onLeftPressed(Vec2i mousePos) {
     }
 
     AtomStorage& atoms = ctx.simulation->atoms();
-    const SimBox& box = ctx.simulation->box();
+    const World& box = ctx.simulation->box();
     const AtomData::Type atomType = static_cast<AtomData::Type>(PeriodicPanel::decodeAtom(ctx.uiState->selectedAtom));
     const Vec3f spawnPos = screenToWorld(mousePos);
 

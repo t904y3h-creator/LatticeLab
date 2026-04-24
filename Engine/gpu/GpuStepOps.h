@@ -17,11 +17,11 @@ public:
 
     // Отражение от стенок. Обновляет pos и vel в buffers.
     // boxMax = box.size - Vec3f(1,1,1)
-    void dispatchConfine(GpuAtomBuffers& buffers, uint32_t atomCount, float maxX, float maxY, float maxZ);
+    void recordConfine(wgpu::CommandEncoder enc, GpuAtomBuffers& buffers, uint32_t atomCount, float maxX, float maxY, float maxZ);
 
     // Ограничение скорости. Обновляет vel в buffers.
     // Вызывать только если maxSpeed > 0.
-    void dispatchVelCap(GpuAtomBuffers& buffers, uint32_t atomCount, float maxSpeed);
+    void recordVelCap(wgpu::CommandEncoder enc, GpuAtomBuffers& buffers, uint32_t atomCount, float maxSpeed);
 
 private:
     void buildPipelines();

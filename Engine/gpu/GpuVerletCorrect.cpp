@@ -74,8 +74,8 @@ void GpuVerletCorrect::buildPipeline() {
 }
 
 wgpu::BindGroup GpuVerletCorrect::makeBindGroup(GpuAtomBuffers& buffers) const {
-    const size_t vec4Bytes = buffers.capacity() * 4 * sizeof(float);
-    const size_t f32Bytes = buffers.capacity() * sizeof(float);
+    const size_t vec4Bytes = buffers.countAtoms() * 4 * sizeof(float);
+    const size_t f32Bytes = buffers.countAtoms() * sizeof(float);
 
     std::array<wgpu::BindGroupEntry, 5> entries{};
 
@@ -106,9 +106,9 @@ wgpu::BindGroup GpuVerletCorrect::makeBindGroup(GpuAtomBuffers& buffers) const {
     return WGPUContext::instance().device().createBindGroup(bgDesc);
 }
 
-void GpuVerletCorrect::dispatch(GpuAtomBuffers& buffers, uint32_t atomCount, float dt, float accelDamping) {
+void GpuVerletCorrect::record(wgpu::CommandEncoder& enc, GpuAtomBuffers& buffers, uint32_t atomCount, float dt, float accelDamping) {
     assert(isReady());
-    assert(atomCount <= buffers.capacity());
+    assert(atomCount <= buffers.countAtoms());
 
     struct GpuUniforms {
         float dt;
@@ -121,21 +121,14 @@ void GpuVerletCorrect::dispatch(GpuAtomBuffers& buffers, uint32_t atomCount, flo
 
     wgpu::BindGroup bindGroup = makeBindGroup(buffers);
 
-    wgpu::CommandEncoder enc = WGPUContext::instance().device().createCommandEncoder({});
-    {
-        wgpu::ComputePassDescriptor passDesc{};
-        passDesc.label = wgpu::StringView("VerletCorrect pass");
-        wgpu::ComputePassEncoder pass = enc.beginComputePass(passDesc);
+    wgpu::ComputePassDescriptor passDesc{};
+    passDesc.label = wgpu::StringView("VerletCorrect pass");
+    wgpu::ComputePassEncoder pass = enc.beginComputePass(passDesc);
 
-        pass.setPipeline(pipeline_);
-        pass.setBindGroup(0, bindGroup, 0, nullptr);
+    pass.setPipeline(pipeline_);
+    pass.setBindGroup(0, bindGroup, 0, nullptr);
 
-        const uint32_t groups = (atomCount + kWorkgroupSize - 1) / kWorkgroupSize;
-        pass.dispatchWorkgroups(groups, 1, 1);
-        pass.end();
-    }
-
-    wgpu::CommandBuffer cmd = enc.finish({});
-    WGPUContext::instance().queue().submit(1, &cmd);
-    WGPUContext::instance().device().poll(false, nullptr);
+    const uint32_t groups = (atomCount + kWorkgroupSize - 1) / kWorkgroupSize;
+    pass.dispatchWorkgroups(groups, 1, 1);
+    pass.end();
 }

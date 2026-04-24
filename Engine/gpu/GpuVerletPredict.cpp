@@ -74,7 +74,7 @@ void GpuVerletPredict::buildPipeline() {
 }
 
 wgpu::BindGroup GpuVerletPredict::makeBindGroup(GpuAtomBuffers& buffers) const {
-    const size_t cap = buffers.capacity();
+    const size_t cap = buffers.countAtoms();
     const size_t vec4Bytes = cap * 4 * sizeof(float);
     const size_t f32Bytes = cap * sizeof(float);
 
@@ -107,9 +107,9 @@ wgpu::BindGroup GpuVerletPredict::makeBindGroup(GpuAtomBuffers& buffers) const {
     return WGPUContext::instance().device().createBindGroup(bgDesc);
 }
 
-void GpuVerletPredict::dispatch(GpuAtomBuffers& buffers, uint32_t atomCount, float dt) {
+void GpuVerletPredict::record(wgpu::CommandEncoder& enc, GpuAtomBuffers& buffers, uint32_t atomCount, float dt) {
     assert(isReady());
-    assert(atomCount <= buffers.capacity());
+    assert(atomCount <= buffers.countAtoms());
 
     // Обновляем uniform-буфер.
     struct GpuUniforms {
@@ -122,21 +122,14 @@ void GpuVerletPredict::dispatch(GpuAtomBuffers& buffers, uint32_t atomCount, flo
 
     wgpu::BindGroup bindGroup = makeBindGroup(buffers);
 
-    wgpu::CommandEncoder enc = WGPUContext::instance().device().createCommandEncoder({});
-    {
-        wgpu::ComputePassDescriptor passDesc{};
-        passDesc.label = wgpu::StringView("VerletPredict pass");
-        wgpu::ComputePassEncoder pass = enc.beginComputePass(passDesc);
+    wgpu::ComputePassDescriptor passDesc{};
+    passDesc.label = wgpu::StringView("VerletPredict pass");
+    wgpu::ComputePassEncoder pass = enc.beginComputePass(passDesc);
 
-        pass.setPipeline(pipeline_);
-        pass.setBindGroup(0, bindGroup, 0, nullptr);
+    pass.setPipeline(pipeline_);
+    pass.setBindGroup(0, bindGroup, 0, nullptr);
 
-        const uint32_t groups = (atomCount + kWorkgroupSize - 1) / kWorkgroupSize;
-        pass.dispatchWorkgroups(groups, 1, 1);
-        pass.end();
-    }
-
-    wgpu::CommandBuffer cmd = enc.finish({});
-    WGPUContext::instance().queue().submit(1, &cmd);
-    WGPUContext::instance().device().poll(false, nullptr);
+    const uint32_t groups = (atomCount + kWorkgroupSize - 1) / kWorkgroupSize;
+    pass.dispatchWorkgroups(groups, 1, 1);
+    pass.end();
 }

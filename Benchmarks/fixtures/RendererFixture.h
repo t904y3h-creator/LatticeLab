@@ -60,7 +60,7 @@ protected:
     std::unique_ptr<IRenderer> renderer_;
     AtomStorage atomStorage_;
     Bond::List bonds_;
-    SimBox box_{Vec3f(300, 300, 300)};
+    World box_{Vec3f(300, 300, 300)};
 
 private:
     static AtomStorage makeGridAtoms(int count) {
