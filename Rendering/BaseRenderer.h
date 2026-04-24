@@ -17,8 +17,7 @@ public:
 
     virtual ~IRenderer() = default;
 
-    virtual void drawShot(wgpu::TextureView targetView, wgpu::TextureView depthView, const World& box) = 0;
-    virtual void endFrame() = 0;
+    virtual void drawShot(wgpu::CommandEncoder encoder, wgpu::TextureView targetView, wgpu::TextureView depthView, const World& world) = 0;
 
     bool drawGrid = false;
     bool drawBonds = false;

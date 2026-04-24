@@ -49,7 +49,7 @@ void GpuAtomBuffers::uploadU32(wgpu::Buffer buf, std::span<const uint32_t> data)
     WGPUContext::instance().queue().writeBuffer(buf, 0, data.data(), data.size_bytes());
 }
 
-void GpuAtomBuffers::downloadRaw(wgpu::Buffer src, size_t byteCount) {
+void GpuAtomBuffers::downloadRaw(wgpu::Buffer src, size_t byteCount) const {
     tmpBuf_.resize(byteCount);
 
     wgpu::BufferDescriptor desc{};
@@ -81,7 +81,7 @@ void GpuAtomBuffers::downloadRaw(wgpu::Buffer src, size_t byteCount) {
     staging.destroy();
 }
 
-void GpuAtomBuffers::downloadVec3(wgpu::Buffer buf, std::span<Vec3f> data) {
+void GpuAtomBuffers::downloadVec3(wgpu::Buffer buf, std::span<Vec3f> data) const {
     downloadRaw(buf, data.size() * 4 * sizeof(float));
 
     const float* src = reinterpret_cast<const float*>(tmpBuf_.data());
@@ -92,12 +92,12 @@ void GpuAtomBuffers::downloadVec3(wgpu::Buffer buf, std::span<Vec3f> data) {
     }
 }
 
-void GpuAtomBuffers::downloadFloat(wgpu::Buffer buf, std::span<float> data) {
+void GpuAtomBuffers::downloadFloat(wgpu::Buffer buf, std::span<float> data) const {
     downloadRaw(buf, data.size_bytes());
     std::memcpy(data.data(), tmpBuf_.data(), data.size_bytes());
 }
 
-void GpuAtomBuffers::downloadU32(wgpu::Buffer buf, std::span<uint32_t> data) {
+void GpuAtomBuffers::downloadU32(wgpu::Buffer buf, std::span<uint32_t> data) const {
     downloadRaw(buf, data.size_bytes());
     std::memcpy(data.data(), tmpBuf_.data(), data.size_bytes());
 }
@@ -112,12 +112,12 @@ void GpuAtomBuffers::uploadCharge(std::span<const float> v) { uploadFloat(bufCha
 void GpuAtomBuffers::uploadAtomType(std::span<const uint32_t> v) { uploadU32(bufAtomType_, v); }
 void GpuAtomBuffers::uploadValence(std::span<const uint32_t> v) { uploadU32(bufValence_, v); }
 
-void GpuAtomBuffers::downloadPositions(std::span<Vec3f> v) { downloadVec3(bufPos_, v); }
-void GpuAtomBuffers::downloadVelocities(std::span<Vec3f> v) { downloadVec3(bufVel_, v); }
-void GpuAtomBuffers::downloadForces(std::span<Vec3f> v) { downloadVec3(bufF_, v); }
-void GpuAtomBuffers::downloadPrevForces(std::span<Vec3f> v) { downloadVec3(bufPrevF_, v); }
-void GpuAtomBuffers::downloadPe(std::span<float> v) { downloadFloat(bufPe_, v); }
-void GpuAtomBuffers::downloadInvMass(std::span<float> v) { downloadFloat(bufInvMass_, v); }
-void GpuAtomBuffers::downloadCharge(std::span<float> v) { downloadFloat(bufCharge_, v); }
-void GpuAtomBuffers::downloadAtomType(std::span<uint32_t> v) { downloadU32(bufAtomType_, v); }
-void GpuAtomBuffers::downloadValence(std::span<uint32_t> v) { downloadU32(bufValence_, v); }
+void GpuAtomBuffers::downloadPositions(std::span<Vec3f> v) const { downloadVec3(bufPos_, v); }
+void GpuAtomBuffers::downloadVelocities(std::span<Vec3f> v) const { downloadVec3(bufVel_, v); }
+void GpuAtomBuffers::downloadForces(std::span<Vec3f> v) const { downloadVec3(bufF_, v); }
+void GpuAtomBuffers::downloadPrevForces(std::span<Vec3f> v) const { downloadVec3(bufPrevF_, v); }
+void GpuAtomBuffers::downloadPe(std::span<float> v) const { downloadFloat(bufPe_, v); }
+void GpuAtomBuffers::downloadInvMass(std::span<float> v) const { downloadFloat(bufInvMass_, v); }
+void GpuAtomBuffers::downloadCharge(std::span<float> v) const { downloadFloat(bufCharge_, v); }
+void GpuAtomBuffers::downloadAtomType(std::span<uint32_t> v) const { downloadU32(bufAtomType_, v); }
+void GpuAtomBuffers::downloadValence(std::span<uint32_t> v) const { downloadU32(bufValence_, v); }

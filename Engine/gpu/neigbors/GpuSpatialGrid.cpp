@@ -89,7 +89,7 @@ void GpuSpatialGrid::buildPipelines() {
     uniformBuffer_ = ctx.createBuffer(sizeof(GridUniforms), wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst, "GridUniforms");
 }
 
-wgpu::BindGroup GpuSpatialGrid::makeBindGroup(GpuGridBuffers& gridBufs, wgpu::Buffer bufPos) const {
+wgpu::BindGroup GpuSpatialGrid::makeBindGroup(const GpuGridBuffers& gridBufs, wgpu::Buffer bufPos) const {
     const size_t nAtoms = gridBufs.countAtoms();
     const size_t nCells = gridBufs.countCells();
     const size_t blockCount = (nCells + kWorkgroupScan - 1) / kWorkgroupScan;
@@ -151,7 +151,7 @@ void GpuSpatialGrid::record(wgpu::CommandEncoder enc, World& world) {
 
     WGPUContext::instance().queue().writeBuffer(uniformBuffer_, 0, &uni, sizeof(uni));
 
-    GpuGridBuffers& gridBufs = world.getGridBuffers();
+    const GpuGridBuffers& gridBufs = world.getGridBuffers();
 
     wgpu::BindGroup bg = makeBindGroup(gridBufs, world.getAtomBuffers().bufPos());
 

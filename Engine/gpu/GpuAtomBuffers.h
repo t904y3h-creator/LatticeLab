@@ -31,15 +31,15 @@ public:
     void uploadValence(std::span<const uint32_t> v);
 
     // Download GPU → CPU
-    void downloadPositions(std::span<Vec3f> v);
-    void downloadVelocities(std::span<Vec3f> v);
-    void downloadForces(std::span<Vec3f> v);
-    void downloadPrevForces(std::span<Vec3f> v);
-    void downloadPe(std::span<float> v);
-    void downloadInvMass(std::span<float> v);
-    void downloadCharge(std::span<float> v);
-    void downloadAtomType(std::span<uint32_t> v);
-    void downloadValence(std::span<uint32_t> v);
+    void downloadPositions(std::span<Vec3f> v) const;
+    void downloadVelocities(std::span<Vec3f> v) const;
+    void downloadForces(std::span<Vec3f> v) const;
+    void downloadPrevForces(std::span<Vec3f> v) const;
+    void downloadPe(std::span<float> v) const;
+    void downloadInvMass(std::span<float> v) const;
+    void downloadCharge(std::span<float> v) const;
+    void downloadAtomType(std::span<uint32_t> v) const;
+    void downloadValence(std::span<uint32_t> v) const;
 
     wgpu::Buffer bufPos() const { return bufPos_; }
     wgpu::Buffer bufVel() const { return bufVel_; }
@@ -56,11 +56,11 @@ private:
     void uploadFloat(wgpu::Buffer buf, std::span<const float> data);
     void uploadU32(wgpu::Buffer buf, std::span<const uint32_t> data);
 
-    void downloadRaw(wgpu::Buffer src, size_t byteCount);
+    void downloadRaw(wgpu::Buffer src, size_t byteCount) const;
 
-    void downloadVec3(wgpu::Buffer buf, std::span<Vec3f> data);
-    void downloadFloat(wgpu::Buffer buf, std::span<float> data);
-    void downloadU32(wgpu::Buffer buf, std::span<uint32_t> data);
+    void downloadVec3(wgpu::Buffer buf, std::span<Vec3f> data) const;
+    void downloadFloat(wgpu::Buffer buf, std::span<float> data) const;
+    void downloadU32(wgpu::Buffer buf, std::span<uint32_t> data) const;
 
     size_t countAtoms_ = 0;
 
@@ -74,5 +74,5 @@ private:
     wgpu::Buffer bufAtomType_ = nullptr; // array<u32>
     wgpu::Buffer bufValence_ = nullptr;  // array<u32>
 
-    std::vector<std::byte> tmpBuf_;
+    mutable std::vector<std::byte> tmpBuf_;
 };

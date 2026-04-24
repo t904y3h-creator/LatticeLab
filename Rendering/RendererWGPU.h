@@ -4,17 +4,14 @@
 
 #include <glm/glm.hpp>
 
-#include "Engine/gpu/GpuAtomBuffers.h"
 #include "Rendering/BaseRenderer.h"
 
 class RendererWGPU : public IRenderer {
 public:
-    RendererWGPU(World& simbox, wgpu::Device device, wgpu::TextureFormat surfaceFormat, const GpuAtomBuffers& atomBuffers);
+    RendererWGPU(World& world, wgpu::TextureFormat surfaceFormat);
     ~RendererWGPU() override = default;
 
-    void drawShot(wgpu::TextureView targetView, wgpu::TextureView depthView, const AtomStorage& atoms, const Bond::List& bonds,
-                  const World& box, const GpuAtomBuffers& atomBuffers) override;
-    void endFrame() override;
+    void drawShot(wgpu::CommandEncoder encoder, wgpu::TextureView targetView, wgpu::TextureView depthView, const World& world) override;
 
     wgpu::RenderPassEncoder getCurrentPass() { return currentPass; }
 
@@ -25,8 +22,6 @@ protected:
 
     glm::mat4 projection{1.f};
     glm::mat4 view{1.f};
-
-    wgpu::Device device = nullptr;
 
     void initAtomPipeline(std::string_view atomWGSL);
     void initGridPipeline(std::string_view gridWGSL);
@@ -45,7 +40,21 @@ private:
     };
     wgpu::Buffer uniformBuffer = nullptr;
 
-    // Pipelines (аналог bgfx::ProgramHandle)
+    struct GridUniforms {
+        float cellSize;
+        uint32_t dx;
+        uint32_t dy;
+        uint32_t dz;
+    };
+    wgpu::Buffer gridUniformBuffer = nullptr;
+
+    // Vertex buffers
+    wgpu::Buffer atomQuadVb = nullptr;
+    wgpu::Buffer bondVb = nullptr;
+    wgpu::Buffer boxVb = nullptr;
+    wgpu::Buffer gridLineVb = nullptr;
+
+    // Pipelines
     wgpu::RenderPipeline atomPipeline = nullptr;
     wgpu::RenderPipeline bondPipeline = nullptr;
     wgpu::RenderPipeline boxPipeline = nullptr;
@@ -56,30 +65,18 @@ private:
     wgpu::BindGroupLayout lineBindGroupLayout = nullptr;
     wgpu::BindGroupLayout gridBindGroupLayout = nullptr;
 
-    // Vertex buffers
-    wgpu::Buffer atomQuadVb = nullptr;
-    wgpu::Buffer bondVb = nullptr;
-    wgpu::Buffer boxVb = nullptr;
-    wgpu::Buffer gridLineVb = nullptr;
-    wgpu::Buffer gridInstVb = nullptr;
-
     // Storage buffers
-    wgpu::Buffer sbPos = nullptr;    // array<vec4f> — x,y,z,pad
-    wgpu::Buffer sbVel = nullptr;    // array<vec4f> — vx,vy,vz,pad
-    wgpu::Buffer sbType = nullptr;   // array<f32>
-    wgpu::Buffer sbRadius = nullptr; // array<f32>
-    wgpu::Buffer sbSel = nullptr;    // array<f32>
+    // TODO заменить на array<bool>
+    wgpu::Buffer sbRadius = nullptr;
+    wgpu::Buffer sbSel = nullptr; // array<f32>
 
     size_t sbCapacity_ = 0;
     size_t bondVbCapacity_ = 0;
-    size_t gridInstVbCapacity_ = 0;
 
     wgpu::BindGroup atomBindGroup = nullptr;
 
     // Текущий render pass (живёт в течение drawShot)
     wgpu::RenderPassEncoder currentPass = nullptr;
-    wgpu::TextureView currentTargetView = nullptr;
-    wgpu::TextureView currentDepthView = nullptr;
 
     wgpu::TextureFormat surfaceFormat;
 
@@ -91,29 +88,18 @@ private:
     void initLinePipeline(wgpu::RenderPipeline& outPipeline, std::string_view wgsl);
 
     // Helpers
-    wgpu::Buffer createBuffer(uint64_t size, wgpu::BufferUsage usage, std::string_view label);
-    void ensureStorageBuffers(size_t count);
-    template <typename T> void uploadStorageBuffer(wgpu::Buffer& buf, const T* data, size_t count);
+    void rebuildBindGroup(const World& world);
+    void uploadRadii(const World& world);
 
     // Draw
-    void drawAtomsImpl(const AtomStorage& atoms);
-    void drawBondsImpl(const AtomStorage& atoms, const Bond::List& bonds);
-    void drawBoxImpl(const World& box);
-    void drawGridImpl(const SpatialGrid& grid);
+    void drawAtomsImpl(const World& world);
+    // void drawBondsImpl(const AtomStorage& atoms, const Bond::List& bonds);
+    void drawBoxImpl(const Vec3f& worldSize);
+    void drawGridImpl(const World& world);
 
     // Data
-    struct GridInstance {
-        glm::vec4 origin;
-        float cellSize;
-        float atomCount;
-        float pad[2] = {};
-    };
-
-    std::vector<GridInstance> gridData;
     std::vector<glm::vec4> typeColorsData;
-    std::vector<float> selectedData;
+    std::vector<float> selectedData_;
     std::vector<float> radii;
     std::vector<float> typeData;
-
-    wgpu::CommandEncoder currentEncoder = nullptr;
 };

@@ -21,7 +21,7 @@ public:
 private:
     void buildPipelines();
 
-    wgpu::BindGroup makeBindGroup(GpuGridBuffers& gridBufs, wgpu::Buffer bufPos) const;
+    wgpu::BindGroup makeBindGroup(const GpuGridBuffers& gridBufs, wgpu::Buffer bufPos) const;
 
     void runPass(wgpu::CommandEncoder enc, wgpu::ComputePipeline pipeline, wgpu::BindGroup bindGroup, uint32_t workgroupsX,
                  std::string_view label) const;

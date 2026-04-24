@@ -19,8 +19,8 @@ public:
 
     const Vec3u& getGridSize() const noexcept { return gridSize; }
 
-    GpuAtomBuffers& getAtomBuffers() { return atomBuffers; }
-    GpuGridBuffers& getGridBuffers() { return gridBuffers; }
+    const GpuAtomBuffers& getAtomBuffers() const { return atomBuffers; }
+    const GpuGridBuffers& getGridBuffers() const { return gridBuffers; }
 
 private:
     void rebuildGrid();
