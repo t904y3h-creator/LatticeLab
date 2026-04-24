@@ -19,6 +19,6 @@ void World::setGridCellSize(float newSize) {
 }
 
 void World::rebuildGrid() {
-    Vec3u gridSize(size / gridCellSize);
+    gridSize = Vec3u(size / gridCellSize);
     gridBuffers.resize(atomBuffers.countAtoms(), gridSize.x * gridSize.y * gridSize.z);
 }

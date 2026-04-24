@@ -2,57 +2,44 @@
 
 #include <array>
 #include <cassert>
-#include <cstring>
 
 #include <webgpu/webgpu.hpp>
 
-#include "Engine/NeighborSearch/SpatialGrid.h"
-#include "Engine/gpu//neigbors/GpuGridBuffers.h"
+#include "Engine/World.h"
 #include "Engine/gpu/WGPUContext.h"
+#include "Engine/gpu/neigbors/GpuGridBuffers.h"
 #include "generated/shaders/spatial_grid.wgsl.h"
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Uniforms (должны совпадать со struct Params в шейдере)
-// ─────────────────────────────────────────────────────────────────────────────
 
 struct GridUniforms {
     float cellSize;
     uint32_t dx;
     uint32_t dy;
     uint32_t dz;
-    uint32_t n; // atomCount
+    uint32_t n;
     uint32_t _pad;
 };
 static_assert(sizeof(GridUniforms) == 24);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Построение pipeline
-// ─────────────────────────────────────────────────────────────────────────────
+GpuSpatialGrid::GpuSpatialGrid() { buildPipelines(); }
 
 void GpuSpatialGrid::buildPipelines() {
+    auto& ctx = WGPUContext::instance();
+
     WGPUShaderSourceWGSL wgslDesc{};
     wgslDesc.chain.sType = WGPUSType_ShaderSourceWGSL;
     wgslDesc.code = wgpu::StringView(spatial_gridWGSL);
 
     wgpu::ShaderModuleDescriptor smDesc{};
+    smDesc.label = wgpu::StringView("SpatialGridShader");
     smDesc.nextInChain = &wgslDesc.chain;
-    shaderModule_ = WGPUContext::instance().device().createShaderModule(smDesc);
-
-    // 2. Bind group layout
-    //   binding 0 — uniform    Params
-    //   binding 1 — storage r  pos          (vec4f атомов)
-    //   binding 2 — storage rw counts       (atomic<u32>)
-    //   binding 3 — storage rw starts       (u32)
-    //   binding 4 — storage rw off          (atomic<u32>)
-    //   binding 5 — storage rw sortedIdx    (u32)
-    //   binding 6 — storage rw blockSums    (u32)
+    shaderModule_ = ctx.device().createShaderModule(smDesc);
 
     std::array<wgpu::BindGroupLayoutEntry, 7> bglEntries{};
 
-    auto makeStorageEntry = [](uint32_t binding, wgpu::BufferBindingType type, wgpu::ShaderStage vis = wgpu::ShaderStage::Compute) {
+    auto makeStorageEntry = [](uint32_t binding, wgpu::BufferBindingType type) {
         wgpu::BindGroupLayoutEntry e{};
         e.binding = binding;
-        e.visibility = vis;
+        e.visibility = wgpu::ShaderStage::Compute;
         e.buffer.type = type;
         e.buffer.hasDynamicOffset = false;
         e.buffer.minBindingSize = 0;
@@ -72,47 +59,40 @@ void GpuSpatialGrid::buildPipelines() {
     bglEntries[6] = makeStorageEntry(6, wgpu::BufferBindingType::Storage);
 
     wgpu::BindGroupLayoutDescriptor bglDesc{};
+    bglDesc.label = wgpu::StringView("SpatialGridBindGroupLayout");
     bglDesc.entryCount = static_cast<uint32_t>(bglEntries.size());
     bglDesc.entries = bglEntries.data();
-    bindGroupLayout_ = WGPUContext::instance().device().createBindGroupLayout(bglDesc);
+    bindGroupLayout_ = ctx.device().createBindGroupLayout(bglDesc);
 
-    // 3. Pipeline layout
     WGPUBindGroupLayout rawBGL = bindGroupLayout_;
     wgpu::PipelineLayoutDescriptor plDesc{};
+    plDesc.label = wgpu::StringView("SpatialGridPipelineLayout");
     plDesc.bindGroupLayoutCount = 1;
     plDesc.bindGroupLayouts = &rawBGL;
-    pipelineLayout_ = WGPUContext::instance().device().createPipelineLayout(plDesc);
+    pipelineLayout_ = ctx.device().createPipelineLayout(plDesc);
 
-    // 4. Pipelines — по одному на каждый entry point шейдера
-    auto makePipeline = [&](std::string_view entryPoint) -> wgpu::ComputePipeline {
+    auto makePipeline = [&](std::string_view entryPoint, std::string_view label) -> wgpu::ComputePipeline {
         wgpu::ComputePipelineDescriptor cpDesc{};
+        cpDesc.label = wgpu::StringView(label);
         cpDesc.layout = pipelineLayout_;
         cpDesc.compute.module = shaderModule_;
         cpDesc.compute.entryPoint = wgpu::StringView(entryPoint);
-        return WGPUContext::instance().device().createComputePipeline(cpDesc);
+        return ctx.device().createComputePipeline(cpDesc);
     };
 
-    pipeline_count_ = makePipeline("count");
-    pipeline_scanBlocks_ = makePipeline("scan_blocks");
-    pipeline_scanLevel2_ = makePipeline("scan_level2");
-    pipeline_addOffsets_ = makePipeline("add_offsets");
-    pipeline_sort_ = makePipeline("sort");
+    pipeline_count_ = makePipeline("count", "GridPipelineCount");
+    pipeline_scanBlocks_ = makePipeline("scan_blocks", "GridPipelineScanBlocks");
+    pipeline_scanLevel2_ = makePipeline("scan_level2", "GridPipelineScanLevel2");
+    pipeline_addOffsets_ = makePipeline("add_offsets", "GridPipelineAddOffsets");
+    pipeline_sort_ = makePipeline("sort", "GridPipelineSort");
 
-    // 5. Uniform buffer
-    wgpu::BufferDescriptor ubDesc{};
-    ubDesc.label = wgpu::StringView("GridUniforms");
-    ubDesc.size = sizeof(GridUniforms);
-    ubDesc.usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst;
-    ubDesc.mappedAtCreation = false;
-    uniformBuffer_ = WGPUContext::instance().device().createBuffer(ubDesc);
+    uniformBuffer_ = ctx.createBuffer(sizeof(GridUniforms), wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst, "GridUniforms");
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Bind group
-// ─────────────────────────────────────────────────────────────────────────────
-
 wgpu::BindGroup GpuSpatialGrid::makeBindGroup(GpuGridBuffers& gridBufs, wgpu::Buffer bufPos) const {
-    std::array<wgpu::BindGroupEntry, 7> entries{};
+    const size_t nAtoms = gridBufs.countAtoms();
+    const size_t nCells = gridBufs.countCells();
+    const size_t blockCount = (nCells + kWorkgroupScan - 1) / kWorkgroupScan;
 
     auto makeBE = [](uint32_t binding, wgpu::Buffer buf, size_t size) {
         wgpu::BindGroupEntry e{};
@@ -123,11 +103,7 @@ wgpu::BindGroup GpuSpatialGrid::makeBindGroup(GpuGridBuffers& gridBufs, wgpu::Bu
         return e;
     };
 
-    // Размеры считаем из countAtoms/countCells хранящихся в gridBufs
-    const size_t nAtoms = gridBufs.countAtoms();
-    const size_t nCells = gridBufs.countCells();
-    const size_t blockCount = (nCells + 255) / 256;
-
+    std::array<wgpu::BindGroupEntry, 7> entries{};
     entries[0].binding = 0;
     entries[0].buffer = uniformBuffer_;
     entries[0].offset = 0;
@@ -141,6 +117,7 @@ wgpu::BindGroup GpuSpatialGrid::makeBindGroup(GpuGridBuffers& gridBufs, wgpu::Bu
     entries[6] = makeBE(6, gridBufs.bufBlockSums(), blockCount * sizeof(uint32_t));
 
     wgpu::BindGroupDescriptor bgDesc{};
+    bgDesc.label = wgpu::StringView("GridBindGroup");
     bgDesc.layout = bindGroupLayout_;
     bgDesc.entryCount = static_cast<uint32_t>(entries.size());
     bgDesc.entries = entries.data();
@@ -148,7 +125,7 @@ wgpu::BindGroup GpuSpatialGrid::makeBindGroup(GpuGridBuffers& gridBufs, wgpu::Bu
     return WGPUContext::instance().device().createBindGroup(bgDesc);
 }
 
-void GpuSpatialGrid::runPass(wgpu::CommandEncoder& enc, wgpu::ComputePipeline pipeline, wgpu::BindGroup bindGroup, uint32_t workgroupsX,
+void GpuSpatialGrid::runPass(wgpu::CommandEncoder enc, wgpu::ComputePipeline pipeline, wgpu::BindGroup bindGroup, uint32_t workgroupsX,
                              std::string_view label) const {
     wgpu::ComputePassDescriptor passDesc{};
     passDesc.label = wgpu::StringView(label);
@@ -159,39 +136,33 @@ void GpuSpatialGrid::runPass(wgpu::CommandEncoder& enc, wgpu::ComputePipeline pi
     pass.end();
 }
 
-void GpuSpatialGrid::dispatch(GpuGridBuffers& gridBufs, wgpu::Buffer bufPos, uint32_t atomCount, const SpatialGrid& grid) {
+void GpuSpatialGrid::record(wgpu::CommandEncoder enc, World& world) {
     assert(isReady());
 
-    // Обновляем uniforms
+    const Vec3u& gs = world.getGridSize();
+    const uint32_t nAtoms = static_cast<uint32_t>(world.getAtomBuffers().countAtoms());
+
     GridUniforms uni{};
-    uni.cellSize = static_cast<float>(grid.cellSize);
-    uni.dx = static_cast<uint32_t>(grid.sizeX - 2);
-    uni.dy = static_cast<uint32_t>(grid.sizeY - 2);
-    uni.dz = static_cast<uint32_t>(grid.sizeZ - 2);
-    uni.n = atomCount;
+    uni.cellSize = world.getGridCellSize();
+    uni.dx = gs.x;
+    uni.dy = gs.y;
+    uni.dz = gs.z;
+    uni.n = nAtoms;
+
     WGPUContext::instance().queue().writeBuffer(uniformBuffer_, 0, &uni, sizeof(uni));
 
-    const uint32_t totalCells = uni.dx * uni.dy * uni.dz;
-    gridBufs.resize(atomCount, totalCells);
+    GpuGridBuffers& gridBufs = world.getGridBuffers();
 
-    const uint32_t blockCount = (totalCells + kWorkgroupScan - 1) / kWorkgroupScan;
-
-    wgpu::BindGroup bg = makeBindGroup(gridBufs, bufPos);
-
-    wgpu::CommandEncoder enc = WGPUContext::instance().device().createCommandEncoder({});
+    wgpu::BindGroup bg = makeBindGroup(gridBufs, world.getAtomBuffers().bufPos());
 
     enc.clearBuffer(gridBufs.bufCount(), 0, gridBufs.countCells() * sizeof(uint32_t));
 
-    // Каждый проход — отдельный ComputePassEncoder.
-    // WebGPU гарантирует видимость записей в storage буферах
-    // только между отдельными compute pass-ами.
-    runPass(enc, pipeline_count_, bg, (atomCount + kWorkgroupCount - 1) / kWorkgroupCount, "grid_count");
+    const uint32_t workgroupsAtoms = (nAtoms + kWorkgroupCount - 1) / kWorkgroupCount;
+    const uint32_t blockCount = (gs.x * gs.y * gs.z + kWorkgroupScan - 1) / kWorkgroupScan;
+
+    runPass(enc, pipeline_count_, bg, workgroupsAtoms, "grid_count");
     runPass(enc, pipeline_scanBlocks_, bg, blockCount, "grid_scan_blocks");
     runPass(enc, pipeline_scanLevel2_, bg, 1, "grid_scan_level2");
     runPass(enc, pipeline_addOffsets_, bg, blockCount, "grid_add_offsets");
-    runPass(enc, pipeline_sort_, bg, (atomCount + kWorkgroupCount - 1) / kWorkgroupCount, "grid_sort");
-
-    wgpu::CommandBuffer cmd = enc.finish({});
-    WGPUContext::instance().queue().submit(1, &cmd);
-    WGPUContext::instance().device().poll(true, nullptr);
+    runPass(enc, pipeline_sort_, bg, workgroupsAtoms, "grid_sort");
 }

@@ -12,8 +12,15 @@ public:
     World& operator=(const World&) = delete;
 
     void setWorldSize(const Vec3f& newSize);
+    const Vec3f& getWorldSize() const noexcept { return size; }
 
     void setGridCellSize(float newSize);
+    float getGridCellSize() const noexcept { return gridCellSize; }
+
+    const Vec3u& getGridSize() const noexcept { return gridSize; }
+
+    GpuAtomBuffers& getAtomBuffers() { return atomBuffers; }
+    GpuGridBuffers& getGridBuffers() { return gridBuffers; }
 
 private:
     void rebuildGrid();
@@ -24,5 +31,6 @@ private:
     GpuAtomBuffers atomBuffers;
 
     float gridCellSize;
+    Vec3u gridSize;
     GpuGridBuffers gridBuffers;
 };
