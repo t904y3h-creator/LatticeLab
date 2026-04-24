@@ -6,15 +6,6 @@
 
 #include "Engine/gpu/WGPUContext.h"
 
-wgpu::Buffer GpuAtomBuffers::makeStorageBuffer(size_t bytes, std::string_view label) {
-    wgpu::BufferDescriptor desc{};
-    desc.label = wgpu::StringView(label);
-    desc.size = bytes;
-    desc.usage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::CopySrc;
-    desc.mappedAtCreation = false;
-    return WGPUContext::instance().device().createBuffer(desc);
-}
-
 void GpuAtomBuffers::resize(size_t count) {
     countAtoms_ = count;
 
@@ -22,15 +13,17 @@ void GpuAtomBuffers::resize(size_t count) {
     const size_t f32Bytes = count * sizeof(float);
     const size_t u32Bytes = count * sizeof(uint32_t);
 
-    bufPos_ = makeStorageBuffer(vec4Bytes, "bufPos");
-    bufVel_ = makeStorageBuffer(vec4Bytes, "bufVel");
-    bufF_ = makeStorageBuffer(vec4Bytes, "bufF");
-    bufPrevF_ = makeStorageBuffer(vec4Bytes, "bufPrevF");
-    bufPe_ = makeStorageBuffer(f32Bytes, "bufPe");
-    bufInvMass_ = makeStorageBuffer(f32Bytes, "bufInvMass");
-    bufCharge_ = makeStorageBuffer(f32Bytes, "bufCharge");
-    bufAtomType_ = makeStorageBuffer(u32Bytes, "bufAtomType");
-    bufValence_ = makeStorageBuffer(u32Bytes, "bufValence");
+    WGPUContext& ctx = WGPUContext::instance();
+    const auto storage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::CopySrc;
+    bufPos_ = ctx.createBuffer(vec4Bytes, storage, "bufPos");
+    bufVel_ = ctx.createBuffer(vec4Bytes, storage, "bufVel");
+    bufF_ = ctx.createBuffer(vec4Bytes, storage, "bufF");
+    bufPrevF_ = ctx.createBuffer(vec4Bytes, storage, "bufPrevF");
+    bufPe_ = ctx.createBuffer(f32Bytes, storage, "bufPe");
+    bufInvMass_ = ctx.createBuffer(f32Bytes, storage, "bufInvMass");
+    bufCharge_ = ctx.createBuffer(f32Bytes, storage, "bufCharge");
+    bufAtomType_ = ctx.createBuffer(u32Bytes, storage, "bufAtomType");
+    bufValence_ = ctx.createBuffer(u32Bytes, storage, "bufValence");
 }
 
 void GpuAtomBuffers::uploadVec3(wgpu::Buffer buf, std::span<const Vec3f> data) {
@@ -73,9 +66,7 @@ void GpuAtomBuffers::downloadRaw(wgpu::Buffer src, size_t byteCount) {
     bool done = false;
     wgpu::BufferMapCallbackInfo callbackInfo{};
     callbackInfo.mode = wgpu::CallbackMode::AllowProcessEvents;
-    callbackInfo.callback = [](WGPUMapAsyncStatus status, WGPUStringView label, void* userdata1, void*) {
-        *reinterpret_cast<bool*>(userdata1) = true;
-    };
+    callbackInfo.callback = [](WGPUMapAsyncStatus, WGPUStringView, void* userdata1, void*) { *static_cast<bool*>(userdata1) = true; };
     callbackInfo.userdata1 = &done;
 
     staging.mapAsync(wgpu::MapMode::Read, 0, byteCount, callbackInfo);
@@ -111,8 +102,6 @@ void GpuAtomBuffers::downloadU32(wgpu::Buffer buf, std::span<uint32_t> data) {
     std::memcpy(data.data(), tmpBuf_.data(), data.size_bytes());
 }
 
-// ── public upload ─────────────────────────────────────────────────────────────
-
 void GpuAtomBuffers::uploadPositions(std::span<const Vec3f> v) { uploadVec3(bufPos_, v); }
 void GpuAtomBuffers::uploadVelocities(std::span<const Vec3f> v) { uploadVec3(bufVel_, v); }
 void GpuAtomBuffers::uploadForces(std::span<const Vec3f> v) { uploadVec3(bufF_, v); }
@@ -122,8 +111,6 @@ void GpuAtomBuffers::uploadInvMass(std::span<const float> v) { uploadFloat(bufIn
 void GpuAtomBuffers::uploadCharge(std::span<const float> v) { uploadFloat(bufCharge_, v); }
 void GpuAtomBuffers::uploadAtomType(std::span<const uint32_t> v) { uploadU32(bufAtomType_, v); }
 void GpuAtomBuffers::uploadValence(std::span<const uint32_t> v) { uploadU32(bufValence_, v); }
-
-// ── public download ───────────────────────────────────────────────────────────
 
 void GpuAtomBuffers::downloadPositions(std::span<Vec3f> v) { downloadVec3(bufPos_, v); }
 void GpuAtomBuffers::downloadVelocities(std::span<Vec3f> v) { downloadVec3(bufVel_, v); }

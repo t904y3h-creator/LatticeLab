@@ -52,8 +52,6 @@ public:
     wgpu::Buffer bufValence() const { return bufValence_; }
 
 private:
-    wgpu::Buffer makeStorageBuffer(size_t bytes, std::string_view label);
-
     void uploadVec3(wgpu::Buffer buf, std::span<const Vec3f> data);
     void uploadFloat(wgpu::Buffer buf, std::span<const float> data);
     void uploadU32(wgpu::Buffer buf, std::span<const uint32_t> data);

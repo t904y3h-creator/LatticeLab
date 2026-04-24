@@ -50,7 +50,7 @@ void GpuPhysicsPipeline::onBoxChanged(const World& box) {
     wallMax_ = box.size - Vec3f(1.0f, 1.0f, 1.0f);
 
     const size_t cellCount = static_cast<size_t>((box.grid.sizeX - 2) * (box.grid.sizeY - 2) * (box.grid.sizeZ - 2));
-    gridBufs_.resize(atomBufs_.countAtoms(), cellCount);
+    gridBufs_.resize(atomBufs_.capacity(), cellCount);
 }
 
 void GpuPhysicsPipeline::step(AtomStorage& atoms, NeighborList& neighborList, const World& box, const GpuStepParams& p) {

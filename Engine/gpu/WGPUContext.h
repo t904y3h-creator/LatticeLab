@@ -185,6 +185,15 @@ public:
     uint32_t width() const { return width_; }
     uint32_t height() const { return height_; }
 
+    wgpu::Buffer createBuffer(size_t bytes, wgpu::BufferUsage usage, std::string_view label, bool mappedAtCreation = false) {
+        wgpu::BufferDescriptor desc{};
+        desc.label = wgpu::StringView(label);
+        desc.size = bytes;
+        desc.usage = usage;
+        desc.mappedAtCreation = mappedAtCreation;
+        return device_.createBuffer(desc);
+    }
+
 private:
     WGPUContext() = default;
 

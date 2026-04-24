@@ -1,10 +1,8 @@
 #include "GpuGridBuffers.h"
 
-#include <algorithm>
 #include <cstdint>
 #include <cstring>
 
-#include "Engine/NeighborSearch/SpatialGrid.h"
 #include "Engine/gpu/WGPUContext.h"
 
 void GpuGridBuffers::resize(size_t newAtoms, size_t newCountCells) {
@@ -15,20 +13,14 @@ void GpuGridBuffers::resize(size_t newAtoms, size_t newCountCells) {
     countAtoms_ = newAtoms;
     countCells_ = newCountCells;
 
-    offsets = makeStorageBuffer((countCells_ + 1) * sizeof(uint32_t), "GridOffsets");
-    counts_ = makeStorageBuffer(countCells_ * sizeof(uint32_t), "GridCounts");
-    atomsInCells = makeStorageBuffer(countAtoms_ * sizeof(uint32_t), "AtomsInCells");
-    reorderCursors = makeStorageBuffer((countCells_ + 1) * sizeof(uint32_t), "GridReorderCursors");
+    const size_t blockCount = (newCountCells + 255) / 256; // TODO убрать захардкоженные значения
 
-    const size_t blockCount = (newCountCells + 255) / 256;
-    blockSums_ = makeStorageBuffer(blockCount * sizeof(uint32_t), "GridBlockSums");
-}
+    auto& ctx = WGPUContext::instance();
+    const auto storage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::CopySrc;
 
-wgpu::Buffer GpuGridBuffers::makeStorageBuffer(size_t bytes, std::string_view label) {
-    wgpu::BufferDescriptor desc{};
-    desc.label = wgpu::StringView(label);
-    desc.size = bytes;
-    desc.usage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::CopySrc;
-    desc.mappedAtCreation = false;
-    return WGPUContext::instance().device().createBuffer(desc);
+    offsets_ = ctx.createBuffer((countCells_ + 1) * sizeof(uint32_t), storage, "GridOffsets");
+    counts_ = ctx.createBuffer(countCells_ * sizeof(uint32_t), storage, "GridCounts");
+    atomsInCells_ = ctx.createBuffer(countAtoms_ * sizeof(uint32_t), storage, "GridAtomsInCells");
+    reorderCursors_ = ctx.createBuffer((countCells_ + 1) * sizeof(uint32_t), storage, "GridReorderCursors");
+    blockSums_ = ctx.createBuffer(blockCount * sizeof(uint32_t), storage, "GridBlockSums");
 }
