@@ -6,60 +6,58 @@
 
 #include "Engine/World.h"
 #include "Engine/gpu/WGPUContext.h"
-#include "Engine/physics/ForceField.h"
 
-void GpuPhysicsPipeline::init(const World& world) {
-    const size_t n = atoms.size();
-    const size_t cellCount = static_cast<size_t>((world.getGridSize().x - 2) * (world.getGridSize().y - 2) * (world.getGridSize().z - 2));
-
-    // Буферы
-    atomBufs_.resize(n);
-
-    gridBufs_.resize(n, cellCount);
-
-    // Инициализация
-    gpuLJ_.init(forceField.ljForceField_, atoms);
-
+GpuPhysicsPipeline::GpuPhysicsPipeline(const World& world) {
+    gpuLJ_.init(world.getLJForceField());
     ready_ = true;
 }
 
 void GpuPhysicsPipeline::step(const World& world, const GpuStepParams& p) {
     assert(isReady());
     const uint32_t n = static_cast<uint32_t>(world.mobileCount());
-    auto device = WGPUContext::instance().device();
-    auto queue = WGPUContext::instance().queue();
-
-    wgpu::CommandEncoder enc = device.createCommandEncoder({});
-
-    gpuPredict_.record(enc, world.getAtomBuffers(), n, p.dt);
-    gpuStepOps_.recordConfine(enc, atomBufs_, n, wallMax_.x, wallMax_.y, wallMax_.z);
-
-    enc.copyBufferToBuffer(atomBufs_.bufF(), 0, atomBufs_.bufPrevF(), 0, n * sizeof(float) * 4);
-    clearForcesAndEnergy(enc, n);
-
-    // TODO сделать проверку на смещение cutoff
-    // if (p.allowNLRebuild && neighborList.needsRebuild(atoms)) {
-    gpuSpatialGrid_.record(enc, world);
-    // }
-
-    gpuWall_.record(enc, atomBufs_, n, wallMax_, gravity_);
-
-    if (p.enableLJ) {
-        // const float cutoffSqr = neighborList.cutoff() * neighborList.cutoff();
-        gpuLJ_.record(enc, atomBufs_, gpuSpatialGrid_, n, world.getGridCellSize()); // cutoffSqr);
+    if (n == 0) {
+        return;
     }
 
-    gpuCorrect_.record(enc, atomBufs_, n, p.dt, p.accelDamping);
+    WGPUContext& ctx = WGPUContext::instance();
+    wgpu::CommandEncoder enc = ctx.device().createCommandEncoder({});
 
-    if (p.maxParticleSpeed > 0.0f) {
-        gpuStepOps_.recordVelCap(enc, atomBufs_, n, p.maxParticleSpeed);
+    // 1. predict — обновить позиции
+    gpuPredict_.record(enc, world.getAtomBuffers(), n, p.dt);
+
+    // 2. confine — отразить от стенок
+    gpuStepOps_.recordConfine(enc, world.getAtomBuffers(), n, world.getWorldSize() - Vec3f(1.f, 1.f, 1.f));
+
+    // 3. сохранить prevF, обнулить силы и энергию
+    const size_t vec4Bytes = n * 4 * sizeof(float);
+    enc.copyBufferToBuffer(world.getAtomBuffers().bufF(), 0, world.getAtomBuffers().bufPrevF(), 0, vec4Bytes);
+    clearForcesAndEnergy(enc, world);
+
+    // 4. перестройка сетки
+    gpuSpatialGrid_.record(enc, world);
+
+    // 5. wall forces + гравитация
+    gpuWall_.record(enc, world.getAtomBuffers(), n, world.getWorldSize() - Vec3f(1.f, 1.f, 1.f), world.getGravity());
+
+    // 6. LJ силы
+    if (world.isLJEnabled()) {
+        gpuLJ_.record(enc, world);
+    }
+
+    // 7. correct — обновить скорости
+    gpuCorrect_.record(enc, world.getAtomBuffers(), n, p.dt, p.accelDamping);
+
+    // 8. velCap — ограничить скорость
+    if (p.maxParticleSpeed > 0.f) {
+        gpuStepOps_.recordVelCap(enc, world.getAtomBuffers(), n, p.maxParticleSpeed);
     }
 
     wgpu::CommandBuffer cmd = enc.finish({});
-    queue.submit(1, &cmd);
+    ctx.queue().submit(1, &cmd);
 }
 
 void GpuPhysicsPipeline::clearForcesAndEnergy(wgpu::CommandEncoder enc, const World& world) {
-    enc.clearBuffer(world.getAtomBuffers().bufF(), 0, atomCount * 4 * sizeof(float));
-    enc.clearBuffer(world.getAtomBuffers().bufPe(), 0, atomCount * sizeof(float));
+    const size_t n = world.mobileCount();
+    enc.clearBuffer(world.getAtomBuffers().bufF(), 0, n * 4 * sizeof(float));
+    enc.clearBuffer(world.getAtomBuffers().bufPe(), 0, n * sizeof(float));
 }

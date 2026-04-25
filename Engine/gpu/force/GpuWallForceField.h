@@ -18,11 +18,11 @@ public:
     bool isReady() const { return pipeline_ != nullptr; }
 
     // wallMax = box.size - Vec3f(1,1,1)
-    void record(wgpu::CommandEncoder enc, GpuAtomBuffers& atomBufs, uint32_t atomCount, Vec3f wallMax, Vec3f gravity);
+    void record(wgpu::CommandEncoder enc, const GpuAtomBuffers& atomBufs, uint32_t atomCount, Vec3f wallMax, Vec3f gravity);
 
 private:
     void buildPipeline();
-    wgpu::BindGroup makeBindGroup(GpuAtomBuffers& atomBufs) const;
+    wgpu::BindGroup makeBindGroup(const GpuAtomBuffers& atomBufs) const;
 
     wgpu::ShaderModule shaderModule_ = nullptr;
     wgpu::BindGroupLayout bindGroupLayout_ = nullptr;

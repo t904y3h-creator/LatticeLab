@@ -9,7 +9,6 @@
 #include "Engine/gpu/force/GpuWallForceField.h"
 #include "Engine/gpu/neigbors/GpuSpatialGrid.h"
 
-class ForceField;
 class World;
 
 struct GpuStepParams {
@@ -35,13 +34,10 @@ struct GpuStepParams {
 
 class GpuPhysicsPipeline {
 public:
-    GpuPhysicsPipeline() = default;
-    ~GpuPhysicsPipeline() = default;
+    GpuPhysicsPipeline(const World& world);
 
     GpuPhysicsPipeline(const GpuPhysicsPipeline&) = delete;
     GpuPhysicsPipeline& operator=(const GpuPhysicsPipeline&) = delete;
-
-    void init(const World& box);
 
     bool isReady() const { return ready_; }
 

@@ -73,7 +73,7 @@ void GpuWallForceField::buildPipeline() {
     uniformBuffer_ = WGPUContext::instance().device().createBuffer(ubDesc);
 }
 
-wgpu::BindGroup GpuWallForceField::makeBindGroup(GpuAtomBuffers& atomBufs) const {
+wgpu::BindGroup GpuWallForceField::makeBindGroup(const GpuAtomBuffers& atomBufs) const {
     const size_t vec4Bytes = atomBufs.countAtoms() * 4 * sizeof(float);
 
     std::array<wgpu::BindGroupEntry, 3> entries{};
@@ -99,7 +99,7 @@ wgpu::BindGroup GpuWallForceField::makeBindGroup(GpuAtomBuffers& atomBufs) const
     return WGPUContext::instance().device().createBindGroup(bgDesc);
 }
 
-void GpuWallForceField::record(wgpu::CommandEncoder enc, GpuAtomBuffers& atomBufs, uint32_t atomCount, Vec3f wallMax, Vec3f gravity) {
+void GpuWallForceField::record(wgpu::CommandEncoder enc, const GpuAtomBuffers& atomBufs, uint32_t atomCount, Vec3f wallMax, Vec3f gravity) {
     assert(isReady());
 
     WallUniforms uni{wallMax.x, wallMax.y, wallMax.z, gravity.x, gravity.y, gravity.z, atomCount, 0u};

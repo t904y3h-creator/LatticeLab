@@ -4,6 +4,8 @@
 
 #include <webgpu/webgpu.hpp>
 
+#include "Engine/math/Vec3.h"
+
 class GpuAtomBuffers;
 
 class GpuStepOps {
@@ -17,17 +19,17 @@ public:
 
     // Отражение от стенок. Обновляет pos и vel в buffers.
     // boxMax = box.size - Vec3f(1,1,1)
-    void recordConfine(wgpu::CommandEncoder enc, GpuAtomBuffers& buffers, uint32_t atomCount, float maxX, float maxY, float maxZ);
+    void recordConfine(wgpu::CommandEncoder enc, const GpuAtomBuffers& buffers, uint32_t atomCount, Vec3f max);
 
     // Ограничение скорости. Обновляет vel в buffers.
     // Вызывать только если maxSpeed > 0.
-    void recordVelCap(wgpu::CommandEncoder enc, GpuAtomBuffers& buffers, uint32_t atomCount, float maxSpeed);
+    void recordVelCap(wgpu::CommandEncoder enc, const GpuAtomBuffers& buffers, uint32_t atomCount, float maxSpeed);
 
 private:
     void buildPipelines();
 
-    wgpu::BindGroup makeConfineBindGroup(GpuAtomBuffers& buffers) const;
-    wgpu::BindGroup makeVelCapBindGroup(GpuAtomBuffers& buffers) const;
+    wgpu::BindGroup makeConfineBindGroup(const GpuAtomBuffers& buffers) const;
+    wgpu::BindGroup makeVelCapBindGroup(const GpuAtomBuffers& buffers) const;
 
     wgpu::ShaderModule shaderModule_ = nullptr;
 

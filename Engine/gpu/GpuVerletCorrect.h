@@ -21,11 +21,11 @@ public:
     // Перед вызовом в buffers должны быть загружены:
     //   uploadVelocities, uploadForces, uploadPrevForces, uploadInvMass.
     // После вызова скорости обновлены; скачивайте downloadVelocities.
-    void record(wgpu::CommandEncoder& enc, GpuAtomBuffers& buffers, uint32_t atomCount, float dt, float accelDamping);
+    void record(wgpu::CommandEncoder& enc, const GpuAtomBuffers& buffers, uint32_t atomCount, float dt, float accelDamping);
 
 private:
     void buildPipeline();
-    wgpu::BindGroup makeBindGroup(GpuAtomBuffers& buffers) const;
+    wgpu::BindGroup makeBindGroup(const GpuAtomBuffers& buffers) const;
 
     wgpu::ShaderModule shaderModule_ = nullptr;
     wgpu::BindGroupLayout bindGroupLayout_ = nullptr;

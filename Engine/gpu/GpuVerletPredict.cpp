@@ -73,7 +73,7 @@ void GpuVerletPredict::buildPipeline() {
     uniformBuffer_ = WGPUContext::instance().device().createBuffer(ubDesc);
 }
 
-wgpu::BindGroup GpuVerletPredict::makeBindGroup(GpuAtomBuffers& buffers) const {
+wgpu::BindGroup GpuVerletPredict::makeBindGroup(const GpuAtomBuffers& buffers) const {
     const size_t cap = buffers.countAtoms();
     const size_t vec4Bytes = cap * 4 * sizeof(float);
     const size_t f32Bytes = cap * sizeof(float);
@@ -107,11 +107,10 @@ wgpu::BindGroup GpuVerletPredict::makeBindGroup(GpuAtomBuffers& buffers) const {
     return WGPUContext::instance().device().createBindGroup(bgDesc);
 }
 
-void GpuVerletPredict::record(wgpu::CommandEncoder& enc, GpuAtomBuffers& buffers, uint32_t atomCount, float dt) {
+void GpuVerletPredict::record(wgpu::CommandEncoder& enc, const GpuAtomBuffers& buffers, uint32_t atomCount, float dt) {
     assert(isReady());
     assert(atomCount <= buffers.countAtoms());
 
-    // Обновляем uniform-буфер.
     struct GpuUniforms {
         float dt;
         uint32_t atomCount;

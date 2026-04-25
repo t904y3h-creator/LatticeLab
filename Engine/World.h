@@ -15,6 +15,9 @@ public:
     void setWorldSize(const Vec3f& newSize);
     const Vec3f& getWorldSize() const noexcept { return size; }
 
+    void setGravity(const Vec3f& g) { gravity = g; }
+    const Vec3f& getGravity() const noexcept { return gravity; }
+
     void setGridCellSize(float newSize);
     float getGridCellSize() const noexcept { return gridCellSize; }
 

@@ -73,7 +73,7 @@ void GpuVerletCorrect::buildPipeline() {
     uniformBuffer_ = WGPUContext::instance().device().createBuffer(ubDesc);
 }
 
-wgpu::BindGroup GpuVerletCorrect::makeBindGroup(GpuAtomBuffers& buffers) const {
+wgpu::BindGroup GpuVerletCorrect::makeBindGroup(const GpuAtomBuffers& buffers) const {
     const size_t vec4Bytes = buffers.countAtoms() * 4 * sizeof(float);
     const size_t f32Bytes = buffers.countAtoms() * sizeof(float);
 
@@ -106,7 +106,7 @@ wgpu::BindGroup GpuVerletCorrect::makeBindGroup(GpuAtomBuffers& buffers) const {
     return WGPUContext::instance().device().createBindGroup(bgDesc);
 }
 
-void GpuVerletCorrect::record(wgpu::CommandEncoder& enc, GpuAtomBuffers& buffers, uint32_t atomCount, float dt, float accelDamping) {
+void GpuVerletCorrect::record(wgpu::CommandEncoder& enc, const GpuAtomBuffers& buffers, uint32_t atomCount, float dt, float accelDamping) {
     assert(isReady());
     assert(atomCount <= buffers.countAtoms());
 

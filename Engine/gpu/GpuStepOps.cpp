@@ -116,7 +116,7 @@ void GpuStepOps::buildPipelines() {
     }
 }
 
-wgpu::BindGroup GpuStepOps::makeConfineBindGroup(GpuAtomBuffers& buffers) const {
+wgpu::BindGroup GpuStepOps::makeConfineBindGroup(const GpuAtomBuffers& buffers) const {
     const size_t vec4Bytes = buffers.countAtoms() * 4 * sizeof(float);
 
     std::array<wgpu::BindGroupEntry, 3> entries{};
@@ -142,7 +142,7 @@ wgpu::BindGroup GpuStepOps::makeConfineBindGroup(GpuAtomBuffers& buffers) const 
     return WGPUContext::instance().device().createBindGroup(d);
 }
 
-wgpu::BindGroup GpuStepOps::makeVelCapBindGroup(GpuAtomBuffers& buffers) const {
+wgpu::BindGroup GpuStepOps::makeVelCapBindGroup(const GpuAtomBuffers& buffers) const {
     const size_t vec4Bytes = buffers.countAtoms() * 4 * sizeof(float);
 
     std::array<wgpu::BindGroupEntry, 2> entries{};
@@ -163,10 +163,10 @@ wgpu::BindGroup GpuStepOps::makeVelCapBindGroup(GpuAtomBuffers& buffers) const {
     return WGPUContext::instance().device().createBindGroup(d);
 }
 
-void GpuStepOps::recordConfine(wgpu::CommandEncoder enc, GpuAtomBuffers& buffers, uint32_t atomCount, float maxX, float maxY, float maxZ) {
+void GpuStepOps::recordConfine(wgpu::CommandEncoder enc, const GpuAtomBuffers& buffers, uint32_t atomCount, Vec3f max) {
     assert(isReady());
 
-    ConfineUniforms uni{maxX, maxY, maxZ, 0.8f, atomCount, {0, 0, 0}};
+    ConfineUniforms uni{max.x, max.y, max.z, 0.8f, atomCount, {0, 0, 0}};
     WGPUContext::instance().queue().writeBuffer(ub_confine_, 0, &uni, sizeof(uni));
 
     wgpu::BindGroup bg = makeConfineBindGroup(buffers);
@@ -180,7 +180,7 @@ void GpuStepOps::recordConfine(wgpu::CommandEncoder enc, GpuAtomBuffers& buffers
     pass.end();
 }
 
-void GpuStepOps::recordVelCap(wgpu::CommandEncoder enc, GpuAtomBuffers& buffers, uint32_t atomCount, float maxSpeed) {
+void GpuStepOps::recordVelCap(wgpu::CommandEncoder enc, const GpuAtomBuffers& buffers, uint32_t atomCount, float maxSpeed) {
     assert(isReady());
     assert(maxSpeed > 0.0f);
 
