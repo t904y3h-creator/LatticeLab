@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cstdint>
-
 #include <webgpu/webgpu.hpp>
 
 #include "Engine/gpu/GpuStepOps.h"

@@ -2,6 +2,7 @@
 
 #include "Engine/gpu/GpuAtomBuffers.h"
 #include "Engine/gpu/neigbors/GpuGridBuffers.h"
+#include "Engine/physics/Bond.h"
 #include "Engine/physics/ForceFields/LJTable.h"
 
 class World {
@@ -16,6 +17,11 @@ public:
 
     void setGridCellSize(float newSize);
     float getGridCellSize() const noexcept { return gridCellSize; }
+
+    bool isLJEnabled() const { return ljEnabled; }
+    void setLJEnabled(bool v) { ljEnabled = v; }
+    bool isCoulombEnabled() const { return coulombEnabled; }
+    void setCoulombEnabled(bool v) { coulombEnabled = v; }
 
     const Vec3u& getGridSize() const noexcept { return gridSize; }
 
@@ -39,6 +45,9 @@ public:
     // Полностью очищает все атомы.
     void clearAtoms();
 
+    Bond::List& bonds() { return bonds_; }
+    const Bond::List& bonds() const { return bonds_; }
+
 private:
     void resizeGrid();
     void downloadAll(std::vector<Vec3f>& positions, std::vector<Vec3f>& velocities, std::vector<Vec3f>& forces,
@@ -47,6 +56,9 @@ private:
     void uploadAll(const std::vector<Vec3f>& positions, const std::vector<Vec3f>& velocities, const std::vector<Vec3f>& forces,
                    const std::vector<float>& invMasses, const std::vector<float>& charges, const std::vector<float>& pe,
                    const std::vector<uint32_t>& types, const std::vector<uint32_t>& valences);
+
+    bool ljEnabled = true;
+    bool coulombEnabled = false;
 
     Vec3f size;
     Vec3f gravity;
@@ -58,4 +70,6 @@ private:
     float gridCellSize;
     Vec3u gridSize;
     GpuGridBuffers gridBuffers;
+
+    Bond::List bonds_;
 };
