@@ -1,18 +1,17 @@
 #include "RemoveAtomTool.h"
 
-#include <algorithm>
 #include <vector>
 
 #include "App/interaction/picking/PickingSystem.h"
-#include "Engine/Simulation.h"
-#include "Engine/physics/AtomStorage.h"
+#include "Engine/World.h"
 #include "GUI/interface/UiState.h"
 
 RemoveAtomTool::RemoveAtomTool(ToolContext& context) noexcept : ITool(context) {}
 
 void RemoveAtomTool::onLeftPressed(Vec2i mousePos) {
     ToolContext& ctx = context();
-    if (ctx.simulation == nullptr || ctx.simulation->atoms().empty() || ctx.pickingSystem == nullptr) {
+    assert(ctx.world != nullptr && ctx.pickingSystem != nullptr && ctx.uiState != nullptr);
+    if (ctx.world->atomCount() == 0) [[unlikely]] {
         return;
     }
 
@@ -23,23 +22,18 @@ void RemoveAtomTool::onLeftPressed(Vec2i mousePos) {
 
     const size_t target = hit.index;
     const auto& selected = ctx.pickingSystem->getSelectedIndices();
-    const bool removeSelection = selected.contains(target);
 
-    if (removeSelection) {
+    if (selected.contains(target)) {
         std::vector<size_t> toRemove(selected.begin(), selected.end());
-        std::sort(toRemove.begin(), toRemove.end(), std::greater<>());
-
-        for (size_t index : toRemove) {
-            if (ctx.simulation->removeAtom(index)) {
-                ctx.pickingSystem->handleAtomRemoval(index);
-            }
+        for (size_t idx : toRemove) {
+            ctx.pickingSystem->handleAtomRemoval(idx);
         }
+        ctx.world->removeAtoms(toRemove);
     }
-    else if (ctx.simulation->removeAtom(target)) {
+    else {
         ctx.pickingSystem->handleAtomRemoval(target);
+        ctx.world->removeAtoms({&target, 1});
     }
 
-    if (ctx.uiState != nullptr) {
-        ctx.uiState->selectedAtomCount = static_cast<int>(ctx.pickingSystem->getSelectedIndices().size());
-    }
+    ctx.uiState->selectedAtomCount = static_cast<int>(ctx.pickingSystem->getSelectedIndices().size());
 }

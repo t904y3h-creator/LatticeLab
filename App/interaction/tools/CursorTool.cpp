@@ -1,7 +1,6 @@
 #include "CursorTool.h"
 
 #include "App/interaction/picking/PickingSystem.h"
-#include "Engine/Simulation.h"
 #include "GUI/interface/UiState.h"
 #include "GUI/io/keyboard/Keyboard.h"
 
@@ -9,9 +8,7 @@ CursorTool::CursorTool(ToolContext& context) noexcept : ITool(context) {}
 
 void CursorTool::onLeftPressed(Vec2i mousePos) {
     ToolContext& ctx = context();
-    if (ctx.pickingSystem == nullptr || ctx.simulation == nullptr) {
-        return;
-    }
+    assert(ctx.world != nullptr && ctx.pickingSystem != nullptr);
 
     const bool cumulative = Keyboard::isPressed(GLFW_KEY_LEFT_CONTROL) || Keyboard::isPressed(GLFW_KEY_RIGHT_CONTROL);
 
@@ -35,46 +32,45 @@ void CursorTool::onLeftReleased(Vec2i mousePos) {
 }
 
 void CursorTool::onFrame(Vec2i mousePos, float deltaTime) {
-    ToolContext& ctx = context();
-    if (!atomMoveActive_ || ctx.simulation == nullptr || ctx.pickingSystem == nullptr) {
-        return;
-    }
-    if (deltaTime <= 0.0f) {
-        return;
-    }
-    AtomStorage& atoms = ctx.simulation->atoms();
-    if (selectedMoveAtomIndex_ == InvalidIndex || selectedMoveAtomIndex_ >= atoms.size()) {
-        atomMoveActive_ = false;
-        selectedMoveAtomIndex_ = InvalidIndex;
-        return;
-    }
+    // ToolContext& ctx = context();
+    // assert(atomMoveActive_ && ctx.world != nullptr && ctx.pickingSystem != nullptr);
+    // assert(deltaTime > 0.0f);
 
-    const Vec3f worldMouse = screenToWorld(mousePos);
-    const auto& selectedIndices = ctx.pickingSystem->getSelectedIndices();
-    const Vec3f selectedWorldPos = atoms.pos(selectedMoveAtomIndex_);
-    const Vec3f displacement = worldMouse - selectedWorldPos;
+    std::cerr << "Not implemented" << std::endl;
+    // TODO добавить отдельный буффер bufExternalForce_ в GpuAtomBuffers
+    // AtomStorage& atoms = ctx.simulation->atoms();
+    // if (selectedMoveAtomIndex_ == InvalidIndex || selectedMoveAtomIndex_ >= atoms.size()) {
+    //     atomMoveActive_ = false;
+    //     selectedMoveAtomIndex_ = InvalidIndex;
+    //     return;
+    // }
 
-    constexpr float kReferenceFrameRate = 60.0f;
-    constexpr float kDragStrength = 5.f;
-    const float frameScale = deltaTime * kReferenceFrameRate;
+    // const Vec3f worldMouse = screenToWorld(mousePos);
+    // const auto& selectedIndices = ctx.pickingSystem->getSelectedIndices();
+    // const Vec3f selectedWorldPos = atoms.pos(selectedMoveAtomIndex_);
+    // const Vec3f displacement = worldMouse - selectedWorldPos;
 
-    auto applyRawForce = [&](size_t idx, const Vec3f& baseDisplacement) {
-        const Vec3f dragForce = baseDisplacement * (kDragStrength * frameScale);
-        atoms.forceX(idx) += dragForce.x;
-        atoms.forceY(idx) += dragForce.y;
-        atoms.forceZ(idx) += dragForce.z;
-    };
+    // constexpr float kReferenceFrameRate = 60.0f;
+    // constexpr float kDragStrength = 5.f;
+    // const float frameScale = deltaTime * kReferenceFrameRate;
 
-    if (selectedIndices.contains(selectedMoveAtomIndex_)) {
-        for (size_t idx : selectedIndices) {
-            if (idx < atoms.size()) {
-                applyRawForce(idx, displacement);
-            }
-        }
-        return;
-    }
+    // auto applyRawForce = [&](size_t idx, const Vec3f& baseDisplacement) {
+    //     const Vec3f dragForce = baseDisplacement * (kDragStrength * frameScale);
+    //     atoms.forceX(idx) += dragForce.x;
+    //     atoms.forceY(idx) += dragForce.y;
+    //     atoms.forceZ(idx) += dragForce.z;
+    // };
 
-    applyRawForce(selectedMoveAtomIndex_, displacement);
+    // if (selectedIndices.contains(selectedMoveAtomIndex_)) {
+    //     for (size_t idx : selectedIndices) {
+    //         if (idx < atoms.size()) {
+    //             applyRawForce(idx, displacement);
+    //         }
+    //     }
+    //     return;
+    // }
+
+    // applyRawForce(selectedMoveAtomIndex_, displacement);
 }
 
 void CursorTool::reset() {
