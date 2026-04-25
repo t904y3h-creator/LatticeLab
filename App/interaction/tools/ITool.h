@@ -9,17 +9,17 @@
 class AtomStorage;
 class IRenderer;
 class PickingSystem;
-class Simulation;
+class World;
 struct UiState;
 
 struct ToolContext {
     GLFWwindow* window = nullptr;
-    Simulation* simulation = nullptr;
+    World* world = nullptr;
     std::unique_ptr<IRenderer>* renderer = nullptr;
     PickingSystem* pickingSystem = nullptr;
     UiState* uiState = nullptr;
 
-    [[nodiscard]] bool isValid() const noexcept { return window != nullptr && simulation != nullptr && renderer != nullptr; }
+    [[nodiscard]] bool isValid() const noexcept { return window != nullptr && world != nullptr && renderer != nullptr; }
 
     [[nodiscard]] IRenderer* activeRenderer() const noexcept { return (renderer != nullptr) ? renderer->get() : nullptr; }
 };
