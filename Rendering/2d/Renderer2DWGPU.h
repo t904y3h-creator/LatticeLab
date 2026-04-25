@@ -4,7 +4,7 @@
 
 class Renderer2DWGPU : public RendererWGPU {
 public:
-    Renderer2DWGPU(World& simbox, wgpu::Device device, wgpu::TextureFormat surfaceFormat, const GpuAtomBuffers& atomBuffers);
+    Renderer2DWGPU(wgpu::TextureFormat surfaceFormat, World& simbox);
     ~Renderer2DWGPU() override = default;
 
 protected:

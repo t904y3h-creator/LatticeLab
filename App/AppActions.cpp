@@ -12,27 +12,29 @@
 #include "Rendering/3d/Renderer3DWGPU.h"
 
 namespace {
-    void shiftAtoms(AtomStorage& atomStorage, Vec3f delta) {
-        float* x = atomStorage.xData();
-        float* y = atomStorage.yData();
-        float* z = atomStorage.zData();
-        const size_t atomCount = atomStorage.size();
-
-        for (size_t i = 0; i < atomCount; ++i) {
-            x[i] += delta.x;
-            y[i] += delta.y;
-            z[i] += delta.z;
+    void shiftAtoms(GpuAtomBuffers& atomBuffers, const Vec3f& delta) {
+        // TODO переписать на шейдер
+        const size_t count = atomBuffers.countAtoms();
+        if (count == 0) {
+            return;
         }
+
+        std::vector<Vec3f> positions(count);
+        atomBuffers.downloadPositions(positions);
+        for (Vec3f& p : positions) {
+            p += delta;
+        }
+        atomBuffers.uploadPositions(positions);
     }
 
     void applyResizeBox(Simulation& simulation, std::unique_ptr<IRenderer>& renderer, const Vec3f& newSize) {
-        const Vec3f oldSize = simulation.box().size;
+        const Vec3f oldSize = simulation.world().getWorldSize();
         const Vec3f delta = (newSize - oldSize) * 0.5f;
 
-        shiftAtoms(simulation.atoms(), delta);
+        shiftAtoms(simulation.world().getAtomBuffers(), delta);
         renderer->camera.move(delta.xy());
         renderer->camera.move3D(delta);
-        simulation.setSizeBox(newSize);
+        simulation.world().setWorldSize(newSize);
     }
 }
 
@@ -47,18 +49,18 @@ namespace AppActions {
         }));
         track(AppSignals::UI::ResizeBox.connect([&](const Vec3f& newSize) { applyResizeBox(simulation, renderer, newSize); }));
         track(AppSignals::UI::ClearSimulation.connect([&]() {
-            simulation.clear();
+            simulation.world().clearAtoms();
             ToolsManager::resetInteractionState();
         }));
         track(AppSignals::UI::CreateGas.connect([&](int atomCount, AtomData::Type atomType, bool is3D, float density) {
-            simulation.clear();
+            simulation.world().clearAtoms();
             ToolsManager::resetInteractionState();
-            Scenes::randomGas(simulation, atomCount, atomType, is3D, 6.0f, 6.0f, density);
+            Scenes::randomGas(simulation.world(), atomCount, atomType, is3D, 6.0f, 6.0f, density);
         }));
         track(AppSignals::UI::CreateCrystal.connect([&](int axisCount, AtomData::Type atomType, bool is3D) {
-            simulation.clear();
+            simulation.world().clearAtoms();
             ToolsManager::resetInteractionState();
-            Scenes::crystal(simulation, axisCount, atomType, is3D);
+            Scenes::crystal(simulation.world(), axisCount, atomType, is3D);
         }));
     }
 
@@ -67,12 +69,10 @@ namespace AppActions {
             std::unique_ptr<IRenderer> newRenderer;
             switch (type) {
             case RendererType::Renderer2D:
-                newRenderer = std::make_unique<Renderer2DWGPU>(simulation.box(), WGPUContext::instance().device(),
-                                                               WGPUContext::instance().surfaceFormat(), simulation.gpuAtomBuffers());
+                newRenderer = std::make_unique<Renderer2DWGPU>(WGPUContext::instance().surfaceFormat(), simulation.world());
                 break;
             case RendererType::Renderer3D:
-                newRenderer = std::make_unique<Renderer3DWGPU>(simulation.box(), WGPUContext::instance().device(),
-                                                               WGPUContext::instance().surfaceFormat(), simulation.gpuAtomBuffers());
+                newRenderer = std::make_unique<Renderer3DWGPU>(WGPUContext::instance().surfaceFormat(), simulation.world());
                 break;
             }
 
@@ -95,11 +95,11 @@ namespace AppActions {
     }
 
     void Handler::trackKeyboard(Simulation& simulation) {
-        track(AppSignals::Keyboard::StepPhysics.connect([&]() { simulation.update(); }));
+        track(AppSignals::Keyboard::StepPhysics.connect([&]() { simulation.step(); }));
     }
 
     void Handler::trackSimControlPanel(Simulation& simulation) {
-        track(AppSignals::UI::StepPhysics.connect([&]() { simulation.update(); }));
+        track(AppSignals::UI::StepPhysics.connect([&]() { simulation.step(); }));
     }
 
     Handler::Handler(GLFWwindow* window, CaptureController& captureController, Simulation& simulation, std::unique_ptr<IRenderer>& renderer,

@@ -9,7 +9,6 @@
 #include "Engine/gpu/force/GpuWallForceField.h"
 #include "Engine/gpu/neigbors/GpuSpatialGrid.h"
 
-class AtomStorage;
 class ForceField;
 class World;
 

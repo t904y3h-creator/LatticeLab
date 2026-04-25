@@ -5,8 +5,7 @@
 
 #include "Engine/physics/BondTable.h"
 
-class AtomStorage;
-
+// TODO переписать на GPU
 class Bond {
 private:
 public:
@@ -14,15 +13,15 @@ public:
     using List = std::list<Bond>;
 
     static void ensureInitialized();
-    static Bond* CreateBond(List& bonds, size_t aIndex, size_t bIndex, AtomStorage& atomStorage);
-    static void BreakBond(List& bonds, Bond* bond, AtomStorage& atomStorage);
-    static void angleForce(AtomStorage& atomStorage, size_t aIndex, size_t bIndex, size_t cIndex);
+    // static Bond* CreateBond(List& bonds, size_t aIndex, size_t bIndex, AtomStorage& atomStorage);
+    // static void BreakBond(List& bonds, Bond* bond, AtomStorage& atomStorage);
+    // static void angleForce(AtomStorage& atomStorage, size_t aIndex, size_t bIndex, size_t cIndex);
 
     Bond(size_t aIndex, size_t bIndex, AtomData::Type aType, AtomData::Type bType);
 
-    void forceBond(AtomStorage& atomStorage, float dt);
-    bool shouldBreak(const AtomStorage& atomStorage) const;
-    void detach(AtomStorage& atomStorage);
+    // void forceBond(AtomStorage& atomStorage, float dt);
+    // bool shouldBreak(const AtomStorage& atomStorage) const;
+    // void detach(AtomStorage& atomStorage);
     float MorseForce(float distanse);
 
     size_t aIndex;

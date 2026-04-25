@@ -8,7 +8,7 @@
 
 class RendererWGPU : public IRenderer {
 public:
-    RendererWGPU(World& world, wgpu::TextureFormat surfaceFormat);
+    RendererWGPU(wgpu::TextureFormat surfaceFormat, World& world);
     ~RendererWGPU() override = default;
 
     void drawShot(wgpu::CommandEncoder encoder, wgpu::TextureView targetView, wgpu::TextureView depthView, const World& world) override;

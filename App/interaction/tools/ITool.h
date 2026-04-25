@@ -4,10 +4,10 @@
 
 #include <GLFW/glfw3.h>
 
+#include "App/interaction/picking/PickingSystem.h"
 #include "Engine/math/Vec3.h"
 
 class IRenderer;
-class PickingSystem;
 class World;
 struct UiState;
 

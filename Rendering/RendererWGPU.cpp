@@ -30,7 +30,7 @@ namespace {
     }
 }
 
-RendererWGPU::RendererWGPU(World& world, wgpu::TextureFormat surfaceFormat) : IRenderer(world), surfaceFormat(surfaceFormat) {
+RendererWGPU::RendererWGPU(wgpu::TextureFormat surfaceFormat, World& world) : IRenderer(world), surfaceFormat(surfaceFormat) {
     uniformBuffer = WGPUContext::instance().createBuffer(sizeof(SceneUniforms), wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst,
                                                          "RenderUniformBuffer");
 
