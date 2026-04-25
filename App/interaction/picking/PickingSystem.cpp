@@ -2,16 +2,24 @@
 
 #include <limits>
 
-#include "Engine/SimBox.h"
+#include "Engine/World.h"
 #include "Engine/math/Ray.h"
+#include "Engine/physics/AtomData.h"
 #include "Rendering/BaseRenderer.h"
 
-PickingSystem::PickingSystem(AtomStorage& atomStorage, World& box, std::unique_ptr<IRenderer>& renderer)
-    : atomStorage(atomStorage), box(box), renderer(&renderer) {}
+PickingSystem::PickingSystem(World& world, std::unique_ptr<IRenderer>& renderer) : world(world), renderer(&renderer) {}
 
 void PickingSystem::clearSelection() {
     overlay.reset();
     selectedIndices.clear();
+}
+
+void PickingSystem::downloadAtomData() const {
+    const size_t count = world.getAtomBuffers().countAtoms();
+    cachedPositions_.resize(count);
+    cachedTypes_.resize(count);
+    world.getAtomBuffers().downloadPositions(cachedPositions_);
+    world.getAtomBuffers().downloadAtomType(cachedTypes_);
 }
 
 void PickingSystem::processClick(Vec2i screenPos, bool cumulative) {
@@ -19,17 +27,14 @@ void PickingSystem::processClick(Vec2i screenPos, bool cumulative) {
     bool found = pickAtom(screenPos, 10.0f, hit);
 
     if (found) {
-        // Если атом уже был выбран и зажат Ctrl — инвертируем (снимаем выделение)
         if (cumulative && selectedIndices.contains(hit.index)) {
             selectedIndices.erase(hit.index);
         }
         else {
-            // Иначе — добавляем в набор
             selectedIndices.insert(hit.index);
         }
     }
     else {
-        // Клик в пустоту без Ctrl — сбрасываем всё
         if (!cumulative) {
             clearSelection();
         }
@@ -40,11 +45,12 @@ void PickingSystem::processRect(Vec2i start, Vec2i end, bool cumulative) {
     if (!cumulative) {
         clearSelection();
     }
+
+    downloadAtomData();
     IRenderer* rend = renderer->get();
 
-    for (size_t i = 0; i < atomStorage.size(); ++i) {
-        const Vec3f worldPos = atomStorage.pos(i);
-        const Vec2i atomScreen = rend->camera.worldToScreen(worldPos);
+    for (size_t i = 0; i < cachedPositions_.size(); ++i) {
+        const Vec2i atomScreen = rend->camera.worldToScreen(cachedPositions_[i]);
         if (pointInRect(atomScreen, start, end)) {
             selectedIndices.insert(i);
         }
@@ -58,11 +64,12 @@ void PickingSystem::processLasso(std::span<Vec2i> points, bool cumulative) {
     if (!cumulative) {
         clearSelection();
     }
+
+    downloadAtomData();
     IRenderer* rend = renderer->get();
 
-    for (size_t i = 0; i < atomStorage.size(); ++i) {
-        const Vec3f worldPos = atomStorage.pos(i);
-        const Vec2i screenPos = rend->camera.worldToScreen(worldPos);
+    for (size_t i = 0; i < cachedPositions_.size(); ++i) {
+        const Vec2i screenPos = rend->camera.worldToScreen(cachedPositions_[i]);
         if (pointInPolygon(screenPos, points)) {
             selectedIndices.insert(i);
         }
@@ -71,9 +78,7 @@ void PickingSystem::processLasso(std::span<Vec2i> points, bool cumulative) {
 
 void PickingSystem::handleAtomRemoval(size_t index) {
     selectedIndices.erase(index);
-
-    size_t movedFrom = atomStorage.size();
-
+    const size_t movedFrom = world.getAtomBuffers().countAtoms();
     if (index < movedFrom) {
         if (selectedIndices.erase(movedFrom) > 0) {
             selectedIndices.insert(index);
@@ -82,6 +87,7 @@ void PickingSystem::handleAtomRemoval(size_t index) {
 }
 
 bool PickingSystem::pickAtom(Vec2i screenPos, float tolerance, AtomHit& hit) const {
+    downloadAtomData();
     IRenderer* rend = renderer->get();
     switch (rend->camera.getMode()) {
     case Camera::Mode::Mode2D:
@@ -98,13 +104,10 @@ bool PickingSystem::pickAtom2D(Vec2i screenPos, float tolerance, AtomHit& hit) c
     float bestDistSqr = std::numeric_limits<float>::max();
     size_t bestIndex = static_cast<size_t>(-1);
 
-    for (size_t i = 0; i < atomStorage.size(); ++i) {
-        const Vec3f worldPos = atomStorage.pos(i);
-        const Vec2i atomScreen = rend->camera.worldToScreen(worldPos);
-        const float distSqr = (atomScreen - Vec2i(screenPos)).sqrAbs();
-
-        // радиус атома в экранных пикселях
-        const float atomRadius = AtomData::getProps(atomStorage.type(i)).radius;
+    for (size_t i = 0; i < cachedPositions_.size(); ++i) {
+        const Vec2i atomScreen = rend->camera.worldToScreen(cachedPositions_[i]);
+        const float distSqr = (atomScreen - screenPos).sqrAbs();
+        const float atomRadius = AtomData::getProps(static_cast<AtomData::Type>(cachedTypes_[i])).radius;
         const float screenRadius = atomRadius * rend->camera.getZoom() + tolerance;
 
         if (distSqr < screenRadius * screenRadius && distSqr < bestDistSqr) {
@@ -116,24 +119,20 @@ bool PickingSystem::pickAtom2D(Vec2i screenPos, float tolerance, AtomHit& hit) c
     if (bestIndex == static_cast<size_t>(-1)) {
         return false;
     }
-
     hit = {bestIndex, std::sqrt(bestDistSqr)};
     return true;
 }
 
-// 3D: ray cast — ищем ближайший атом вдоль луча
 bool PickingSystem::pickAtom3D(Vec2i screenPos, AtomHit& hit) const {
     const Ray ray = (*renderer)->camera.screenToRay(static_cast<float>(screenPos.x), static_cast<float>(screenPos.y));
 
     float bestT = std::numeric_limits<float>::max();
     size_t bestIndex = static_cast<size_t>(-1);
 
-    for (size_t i = 0; i < atomStorage.size(); ++i) {
-        const Vec3f worldPos = atomStorage.pos(i);
-        const float radius = AtomData::getProps(atomStorage.type(i)).radius;
-
+    for (size_t i = 0; i < cachedPositions_.size(); ++i) {
+        const float radius = AtomData::getProps(static_cast<AtomData::Type>(cachedTypes_[i])).radius;
         RaySphereHit rayHit;
-        if (raySphereIntersect(ray, worldPos, radius, rayHit)) {
+        if (raySphereIntersect(ray, cachedPositions_[i], radius, rayHit)) {
             if (rayHit.t < bestT) {
                 bestT = rayHit.t;
                 bestIndex = i;
@@ -144,7 +143,6 @@ bool PickingSystem::pickAtom3D(Vec2i screenPos, AtomHit& hit) const {
     if (bestIndex == static_cast<size_t>(-1)) {
         return false;
     }
-
     hit = {bestIndex, bestT};
     return true;
 }
