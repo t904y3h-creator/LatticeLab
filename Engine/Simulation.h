@@ -70,7 +70,7 @@ private:
 
     float dt_ = 0.01f;
     float maxParticleSpeed_ = 0.f;
-    float accelDamping_ = 0.f;
+    float accelDamping_ = 0.9f;
 
     size_t simStep_ = 0;
     float simTimeNs_ = 0.f;

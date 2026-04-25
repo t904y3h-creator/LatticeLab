@@ -19,6 +19,11 @@ struct GridUniforms {
 @group(0) @binding(1) var<storage, read> cellCounts : array<u32>;
 @group(0) @binding(2) var<uniform>       uGrid     : GridUniforms;
 
+struct VertOut {
+    @builtin(position) pos    : vec4f,
+    @location(0)       color  : vec4f,
+}
+
 @vertex
 fn vs_main(
     @location(0)             localPos : vec3f,

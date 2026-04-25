@@ -94,7 +94,7 @@ void GpuLJForceField::uploadLJTable(const LJTable& ljTable) {
         }
     }
 
-    const size_t bytes = table.size() * sizeof(float);
+    const size_t bytes = table.size() * sizeof(table[0]);
     ljTableBuffer_ = WGPUContext::instance().createBuffer(bytes, wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst, "LJ_Table");
     WGPUContext::instance().queue().writeBuffer(ljTableBuffer_, 0, table.data(), bytes);
 }
@@ -123,10 +123,10 @@ wgpu::BindGroup GpuLJForceField::makeBindGroup(const GpuAtomBuffers& atomBufs, c
     entries[1] = makeBE(1, atomBufs.bufPos(), vec4Bytes);
     entries[2] = makeBE(2, atomBufs.bufF(), vec4Bytes);
     entries[3] = makeBE(3, atomBufs.bufPe(), cap * sizeof(float));
-    entries[4] = makeBE(4, atomBufs.bufAtomType(), u32Bytes);
-    entries[5] = makeBE(5, ljTableBuffer_, tableBytes);
-    entries[6] = makeBE(6, gridBufs.bufOffsets(), (nCells + 1) * sizeof(uint32_t));
-    entries[7] = makeBE(7, gridBufs.bufAtomsInCells(), cap * sizeof(uint32_t));
+    entries[4] = makeBE(4, gridBufs.bufOffsets(), (nCells + 1) * sizeof(uint32_t));
+    entries[5] = makeBE(5, gridBufs.bufAtomsInCells(), cap * sizeof(uint32_t));
+    entries[6] = makeBE(6, ljTableBuffer_, tableBytes);
+    entries[7] = makeBE(7, atomBufs.bufAtomType(), u32Bytes);
 
     wgpu::BindGroupDescriptor bgDesc{};
     bgDesc.layout = bindGroupLayout_;

@@ -64,10 +64,10 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
                     if i == j { continue; }
 
                     let pj = pos[j].xyz;
-                    let dx = pj.x - pi.x;
-                    let dy = pj.y - pi.y;
-                    let dz = pj.z - pi.z;
-                    let d2 = dx * dx + dy * dy + dz * dz;
+                    let rx = pj.x - pi.x;
+                    let ry = pj.y - pi.y;
+                    let rz = pj.z - pi.z;
+                    let d2 = rx * rx + ry * ry + rz * rz;
                     if d2 <= 1e-6 { continue; }
 
                     let params  = lj_table[row_off + atom_types[j]];
@@ -82,9 +82,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
                     let term12  = c12 * inv_d12;
 
                     let force_scale = (6.0 * term6 - 12.0 * term12) * inv_d2;
-                    fx += dx * force_scale;
-                    fy += dy * force_scale;
-                    fz += dz * force_scale;
+                    fx += rx * force_scale;
+                    fy += ry * force_scale;
+                    fz += rz * force_scale;
                     pe += 0.5 * (term12 - term6);
                 }
             }

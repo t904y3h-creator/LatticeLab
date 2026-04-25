@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "Engine/physics/AtomData.h"
+
 World::World(const Vec3f& worldsize, size_t countAtoms, float gridCellSize) : size(worldsize), gridCellSize(gridCellSize) {
     atomBuffers.resize(countAtoms);
     resizeGrid();
@@ -73,18 +75,21 @@ void World::addAtoms(std::span<const Vec3f> positions, std::span<const Vec3f> ve
     std::vector<uint32_t> typ, valences;
     downloadAll(pos, vel, forces, invMasses, charges, pe, typ, valences);
 
-    // вставляем перед статичными
     pos.insert(pos.begin() + mobileCount_, positions.begin(), positions.end());
     vel.insert(vel.begin() + mobileCount_, velocities.begin(), velocities.end());
     forces.insert(forces.begin() + mobileCount_, addCount, Vec3f(0.f, 0.f, 0.f));
-    invMasses.insert(invMasses.begin() + mobileCount_, addCount, 1.f);
-    charges.insert(charges.begin() + mobileCount_, addCount, 0.f);
     pe.insert(pe.begin() + mobileCount_, addCount, 0.f);
     typ.insert(typ.begin() + mobileCount_, types.begin(), types.end());
-    valences.insert(valences.begin() + mobileCount_, addCount, 0u);
+
+    // инициализируем из AtomData
+    for (size_t i = 0; i < addCount; ++i) {
+        const auto& props = AtomData::getProps(static_cast<AtomData::Type>(types[i]));
+        invMasses.insert(invMasses.begin() + mobileCount_ + i, 1.f / props.mass);
+        charges.insert(charges.begin() + mobileCount_ + i, props.defaultCharge);
+        valences.insert(valences.begin() + mobileCount_ + i, props.maxValence);
+    }
 
     mobileCount_ += addCount;
-
     atomBuffers.resize(newCount);
     resizeGrid();
     uploadAll(pos, vel, forces, invMasses, charges, pe, typ, valences);
@@ -100,15 +105,19 @@ void World::addStaticAtoms(std::span<const Vec3f> positions, std::span<const uin
     std::vector<uint32_t> typ, valences;
     downloadAll(pos, vel, forces, invMasses, charges, pe, typ, valences);
 
-    // статичные просто в конец
     pos.insert(pos.end(), positions.begin(), positions.end());
     vel.insert(vel.end(), addCount, Vec3f(0.f, 0.f, 0.f));
     forces.insert(forces.end(), addCount, Vec3f(0.f, 0.f, 0.f));
-    invMasses.insert(invMasses.end(), addCount, 0.f); // invMass = 0 => статичный
-    charges.insert(charges.end(), addCount, 0.f);
     pe.insert(pe.end(), addCount, 0.f);
     typ.insert(typ.end(), types.begin(), types.end());
-    valences.insert(valences.end(), addCount, 0u);
+
+    // статичные: invMass=0, остальное из AtomData
+    for (size_t i = 0; i < addCount; ++i) {
+        const auto& props = AtomData::getProps(static_cast<AtomData::Type>(types[i]));
+        invMasses.emplace_back(1.f / props.mass);
+        charges.emplace_back(props.defaultCharge);
+        valences.emplace_back(props.maxValence);
+    }
 
     atomBuffers.resize(newCount);
     resizeGrid();

@@ -17,7 +17,6 @@ public:
 
     bool isReady() const { return pipeline_ != nullptr; }
 
-    // wallMax = box.size - Vec3f(1,1,1)
     void record(wgpu::CommandEncoder enc, const GpuAtomBuffers& atomBufs, uint32_t atomCount, Vec3f wallMax, Vec3f gravity);
 
 private:

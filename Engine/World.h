@@ -39,7 +39,7 @@ public:
     size_t mobileCount() const { return mobileCount_; }
     size_t staticCount() const { return atomCount() - mobileCount_; }
 
-    const LJTable& getLJForceField() const { return ljForceField_; }
+    const LJTable& getLJTable() const { return ljTable_; }
 
     // Добавляет подвижные атомы (вставляет перед статичными).
     void addAtoms(std::span<const Vec3f> positions, std::span<const Vec3f> velocities, std::span<const uint32_t> types);
@@ -67,7 +67,7 @@ private:
 
     Vec3f size;
     Vec3f gravity;
-    LJTable ljForceField_;
+    LJTable ljTable_;
 
     size_t mobileCount_ = 0;
     GpuAtomBuffers atomBuffers;

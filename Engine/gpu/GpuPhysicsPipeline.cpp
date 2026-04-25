@@ -8,7 +8,7 @@
 #include "Engine/gpu/WGPUContext.h"
 
 GpuPhysicsPipeline::GpuPhysicsPipeline(const World& world) {
-    gpuLJ_.init(world.getLJForceField());
+    gpuLJ_.init(world.getLJTable());
     ready_ = true;
 }
 
@@ -26,7 +26,7 @@ void GpuPhysicsPipeline::step(const World& world, const GpuStepParams& p) {
     gpuPredict_.record(enc, world.getAtomBuffers(), n, p.dt);
 
     // 2. confine — отразить от стенок
-    gpuStepOps_.recordConfine(enc, world.getAtomBuffers(), n, world.getWorldSize() - Vec3f(1.f, 1.f, 1.f));
+    gpuStepOps_.recordConfine(enc, world.getAtomBuffers(), n, world.getWorldSize());
 
     // 3. сохранить prevF, обнулить силы и энергию
     const size_t vec4Bytes = n * 4 * sizeof(float);
@@ -37,7 +37,7 @@ void GpuPhysicsPipeline::step(const World& world, const GpuStepParams& p) {
     gpuSpatialGrid_.record(enc, world);
 
     // 5. wall forces + гравитация
-    gpuWall_.record(enc, world.getAtomBuffers(), n, world.getWorldSize() - Vec3f(1.f, 1.f, 1.f), world.getGravity());
+    gpuWall_.record(enc, world.getAtomBuffers(), n, world.getWorldSize(), world.getGravity());
 
     // 6. LJ силы
     if (world.isLJEnabled()) {

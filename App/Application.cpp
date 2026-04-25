@@ -134,6 +134,8 @@ int Application::run() {
             ImGui::Render();
             auto* wgpuRenderer = static_cast<RendererWGPU*>(renderer.get());
             ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), wgpuRenderer->getCurrentPass());
+            wgpuRenderer->getCurrentPass().end();
+            wgpuRenderer->getCurrentPass() = nullptr;
             // renderer->endFrame();
             wgpu::CommandBuffer cmd = enc.finish({});
             ctx.queue().submit(1, &cmd);

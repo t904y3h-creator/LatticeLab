@@ -45,10 +45,7 @@ namespace Scenes {
             }
         }
 
-        world.getAtomBuffers().resize(positions.size());
-        world.getAtomBuffers().uploadPositions(positions);
-        world.getAtomBuffers().uploadVelocities(velocities);
-        world.getAtomBuffers().uploadAtomType(types);
+        world.addAtoms(positions, velocities, types);
     }
 
     int randomGasInCurrentBox(World& world, int atomCount, AtomData::Type type, bool is3d, float minDistance, float speedScale,
@@ -88,10 +85,7 @@ namespace Scenes {
             return 0;
         }
 
-        world.getAtomBuffers().resize(positions.size());
-        world.getAtomBuffers().uploadPositions(positions);
-        world.getAtomBuffers().uploadVelocities(velocities);
-        world.getAtomBuffers().uploadAtomType(types);
+        world.addAtoms(positions, velocities, types);
 
         return static_cast<int>(positions.size());
     }

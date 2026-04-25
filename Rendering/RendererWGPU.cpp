@@ -378,7 +378,7 @@ void RendererWGPU::drawShot(wgpu::CommandEncoder encoder, wgpu::TextureView targ
 
     currentPass = encoder.beginRenderPass(passDesc);
 
-    if (drawBonds) {
+    if (drawBonds && false) {
         std::cerr << "Bonds not implemented yet" << std::endl;
         // drawBondsImpl(atoms, bonds);
     }

@@ -36,7 +36,6 @@ void CursorTool::onFrame(Vec2i mousePos, float deltaTime) {
     // assert(atomMoveActive_ && ctx.world != nullptr && ctx.pickingSystem != nullptr);
     // assert(deltaTime > 0.0f);
 
-    std::cerr << "Not implemented" << std::endl;
     // TODO добавить отдельный буффер bufExternalForce_ в GpuAtomBuffers
     // AtomStorage& atoms = ctx.simulation->atoms();
     // if (selectedMoveAtomIndex_ == InvalidIndex || selectedMoveAtomIndex_ >= atoms.size()) {

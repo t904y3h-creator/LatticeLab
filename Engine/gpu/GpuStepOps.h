@@ -18,7 +18,6 @@ public:
     bool isReady() const { return pipeline_confine_ != nullptr; }
 
     // Отражение от стенок. Обновляет pos и vel в buffers.
-    // boxMax = box.size - Vec3f(1,1,1)
     void recordConfine(wgpu::CommandEncoder enc, const GpuAtomBuffers& buffers, uint32_t atomCount, Vec3f max);
 
     // Ограничение скорости. Обновляет vel в buffers.

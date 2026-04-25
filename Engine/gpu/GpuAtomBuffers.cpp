@@ -15,15 +15,15 @@ void GpuAtomBuffers::resize(size_t count) {
 
     WGPUContext& ctx = WGPUContext::instance();
     const auto storage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::CopySrc;
-    bufPos_ = ctx.createBuffer(vec4Bytes, storage, "bufPos");
-    bufVel_ = ctx.createBuffer(vec4Bytes, storage, "bufVel");
-    bufF_ = ctx.createBuffer(vec4Bytes, storage, "bufF");
-    bufPrevF_ = ctx.createBuffer(vec4Bytes, storage, "bufPrevF");
-    bufPe_ = ctx.createBuffer(f32Bytes, storage, "bufPe");
-    bufInvMass_ = ctx.createBuffer(f32Bytes, storage, "bufInvMass");
-    bufCharge_ = ctx.createBuffer(f32Bytes, storage, "bufCharge");
-    bufAtomType_ = ctx.createBuffer(u32Bytes, storage, "bufAtomType");
-    bufValence_ = ctx.createBuffer(u32Bytes, storage, "bufValence");
+    bufPos_ = ctx.createBuffer(vec4Bytes, storage, "AtomPos");
+    bufVel_ = ctx.createBuffer(vec4Bytes, storage, "AtomVel");
+    bufF_ = ctx.createBuffer(vec4Bytes, storage, "AtomForce");
+    bufPrevF_ = ctx.createBuffer(vec4Bytes, storage, "AtomPrevForce");
+    bufPe_ = ctx.createBuffer(f32Bytes, storage, "AtomEnergy");
+    bufInvMass_ = ctx.createBuffer(f32Bytes, storage, "AtomInvMass");
+    bufCharge_ = ctx.createBuffer(f32Bytes, storage, "AtomCharge");
+    bufAtomType_ = ctx.createBuffer(u32Bytes, storage, "AtomType");
+    bufValence_ = ctx.createBuffer(u32Bytes, storage, "AtomValence");
 }
 
 void GpuAtomBuffers::uploadVec3(wgpu::Buffer buf, std::span<const Vec3f> data) {
