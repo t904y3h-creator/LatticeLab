@@ -15,19 +15,19 @@
 #include "generated/AppVersion.h"
 
 namespace {
-    const char* integratorName(Integrator::Scheme scheme) {
-        switch (scheme) {
-        case Integrator::Scheme::Verlet:
-            return "Velocity Verlet";
-        case Integrator::Scheme::KDK:
-            return "KDK";
-        case Integrator::Scheme::RK4:
-            return "Runge-Kutta 4";
-        case Integrator::Scheme::Langevin:
-            return "Langevin";
-        }
-        return "Unknown";
-    }
+    // const char* integratorName(Integrator::Scheme scheme) {
+    //     switch (scheme) {
+    //     case Integrator::Scheme::Verlet:
+    //         return "Velocity Verlet";
+    //     case Integrator::Scheme::KDK:
+    //         return "KDK";
+    //     case Integrator::Scheme::RK4:
+    //         return "Runge-Kutta 4";
+    //     case Integrator::Scheme::Langevin:
+    //         return "Langevin";
+    //     }
+    //     return "Unknown";
+    // }
 
     const char* speedColorModeName(IRenderer::SpeedColorMode mode) {
         switch (mode) {
@@ -92,10 +92,10 @@ void SettingsPanel::draw(float uiScale, Vec2i windowSize, Simulation& simulation
 
     ImGui::TextUnformatted("Гравитация");
     ImGui::SameLine();
-    Vec3f gravity = simulation.getGravity();
+    Vec3f gravity = simulation.world().getGravity();
     if (ImGui::Button("Reset##gravity", ImVec2(50.f * uiScale, 0.f))) {
-        simulation.setGravity(Vec3f(0, 0, 0));
-        gravity = simulation.getGravity();
+        simulation.world().setGravity(Vec3f(0, 0, 0));
+        gravity = simulation.world().getGravity();
     }
 
     float gx = gravity.x;
@@ -106,36 +106,37 @@ void SettingsPanel::draw(float uiScale, Vec2i windowSize, Simulation& simulation
     gravityChanged |= ImGui::SliderFloat("Gravity Y##gravity_y", &gy, -10.0f, 10.0f, "%.2f");
     gravityChanged |= ImGui::SliderFloat("Gravity Z##gravity_z", &gz, -10.0f, 10.0f, "%.2f");
     if (gravityChanged) {
-        simulation.setGravity(Vec3f(gx, gy, gz));
+        simulation.world().setGravity(Vec3f(gx, gy, gz));
     }
 
-    Integrator::Scheme currentIntegrator = simulation.getIntegrator();
-    if (ComboStyle::beginCombo("Integrator", integratorName(currentIntegrator), 0.0f, uiScale)) {
-        const Integrator::Scheme schemes[] = {
-            Integrator::Scheme::Verlet,
-            Integrator::Scheme::KDK,
-            Integrator::Scheme::RK4,
-            Integrator::Scheme::Langevin,
-        };
+    // TODO переписать
+    // Integrator::Scheme currentIntegrator = simulation.getIntegrator();
+    // if (ComboStyle::beginCombo("Integrator", integratorName(currentIntegrator), 0.0f, uiScale)) {
+    //     const Integrator::Scheme schemes[] = {
+    //         Integrator::Scheme::Verlet,
+    //         Integrator::Scheme::KDK,
+    //         Integrator::Scheme::RK4,
+    //         Integrator::Scheme::Langevin,
+    //     };
 
-        for (Integrator::Scheme scheme : schemes) {
-            const bool isSelected = (scheme == currentIntegrator);
-            if (ImGui::Selectable(integratorName(scheme), isSelected)) {
-                simulation.setIntegrator(scheme);
-                currentIntegrator = scheme;
-            }
-            if (isSelected) {
-                ImGui::SetItemDefaultFocus();
-            }
-        }
-        ImGui::EndCombo();
-    }
+    //     for (Integrator::Scheme scheme : schemes) {
+    //         const bool isSelected = (scheme == currentIntegrator);
+    //         if (ImGui::Selectable(integratorName(scheme), isSelected)) {
+    //             simulation.setIntegrator(scheme);
+    //             currentIntegrator = scheme;
+    //         }
+    //         if (isSelected) {
+    //             ImGui::SetItemDefaultFocus();
+    //         }
+    //     }
+    //     ImGui::EndCombo();
+    // }
 
-    if (currentIntegrator == Integrator::Scheme::RK4 || currentIntegrator == Integrator::Scheme::Langevin) {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.00f, 0.75f, 0.25f, 1.00f));
-        ImGui::TextWrapped("Внимание: %s пока не реализован и временно работает как Velocity Verlet.", integratorName(currentIntegrator));
-        ImGui::PopStyleColor();
-    }
+    // if (currentIntegrator == Integrator::Scheme::RK4 || currentIntegrator == Integrator::Scheme::Langevin) {
+    //     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.00f, 0.75f, 0.25f, 1.00f));
+    //     ImGui::TextWrapped("Внимание: %s пока не реализован и временно работает как Velocity Verlet.",
+    //     integratorName(currentIntegrator)); ImGui::PopStyleColor();
+    // }
 
     float maxParticleSpeed = simulation.getMaxParticleSpeed();
     ImGui::PushItemWidth(150.0f * uiScale);
@@ -158,19 +159,19 @@ void SettingsPanel::draw(float uiScale, Vec2i windowSize, Simulation& simulation
     }
     ImGui::PopItemWidth();
 
-    bool bondFormationEnabled = simulation.isBondFormationEnabled();
-    if (ImGui::Checkbox("Образовывать связи", &bondFormationEnabled)) {
-        simulation.setBondFormationEnabled(bondFormationEnabled);
-    }
+    // bool bondFormationEnabled = simulation.isBondFormationEnabled();
+    // if (ImGui::Checkbox("Образовывать связи", &bondFormationEnabled)) {
+    //     simulation.setBondFormationEnabled(bondFormationEnabled);
+    // }
 
-    bool ljEnabled = simulation.isLJEnabled();
+    bool ljEnabled = simulation.world().isLJEnabled();
     if (ImGui::Checkbox("LJ", &ljEnabled)) {
-        simulation.setLJEnabled(ljEnabled);
+        simulation.world().setLJEnabled(ljEnabled);
     }
     ImGui::SameLine();
-    bool coulombEnabled = simulation.isCoulombEnabled();
+    bool coulombEnabled = simulation.world().isCoulombEnabled();
     if (ImGui::Checkbox("Coulomb", &coulombEnabled)) {
-        simulation.setCoulombEnabled(coulombEnabled);
+        simulation.world().setCoulombEnabled(coulombEnabled);
     }
 
     ImGui::SeparatorText("Рендер");
@@ -225,20 +226,20 @@ void SettingsPanel::draw(float uiScale, Vec2i windowSize, Simulation& simulation
     ImGui::PopItemWidth();
 
     ImGui::SeparatorText("Список соседей");
-    int cellSize = simulation.box().grid.cellSize;
+    int cellSize = simulation.world().getGridCellSize();
     if (ImGui::SliderInt("Cell size", &cellSize, 1, 32)) {
-        simulation.setSizeBox(simulation.box().size, cellSize);
+        simulation.world().setGridCellSize(cellSize);
     }
 
-    float cutoff = simulation.getNeighborListCutoff();
-    if (ImGui::SliderFloat("Cutoff NL", &cutoff, 0.5f, 20.0f, "%.2f")) {
-        simulation.setNeighborListCutoff(cutoff);
-    }
+    // float cutoff = simulation.getNeighborListCutoff();
+    // if (ImGui::SliderFloat("Cutoff NL", &cutoff, 0.5f, 20.0f, "%.2f")) {
+    //     simulation.setNeighborListCutoff(cutoff);
+    // }
 
-    float skin = simulation.getNeighborListSkin();
-    if (ImGui::SliderFloat("Skin NL", &skin, 0.1f, 10.0f, "%.2f")) {
-        simulation.setNeighborListSkin(skin);
-    }
+    // float skin = simulation.getNeighborListSkin();
+    // if (ImGui::SliderFloat("Skin NL", &skin, 0.1f, 10.0f, "%.2f")) {
+    //     simulation.setNeighborListSkin(skin);
+    // }
 
     if (captureController.isAvailable()) {
         ImGui::SeparatorText("Запись");
@@ -340,10 +341,11 @@ void SettingsPanel::draw(float uiScale, Vec2i windowSize, Simulation& simulation
         renderer->speedColorMode = defaults.rendererSpeedColorMode;
         renderer->speedGradientMax = defaults.rendererSpeedGradientMax;
 
-        simulation.setIntegrator(defaults.simulationIntegrator);
-        simulation.setBondFormationEnabled(defaults.simulationBondFormationEnabled);
-        simulation.setLJEnabled(defaults.simulationLJEnabled);
-        simulation.setCoulombEnabled(defaults.simulationCoulombEnabled);
+        // TODO переписать
+        // simulation.setIntegrator(defaults.simulationIntegrator);
+        // simulation.setBondFormationEnabled(defaults.simulationBondFormationEnabled);
+        simulation.world().setLJEnabled(defaults.simulationLJEnabled);
+        simulation.world().setCoulombEnabled(defaults.simulationCoulombEnabled);
     }
 
     const float exitButtonWidth = ImGui::GetContentRegionAvail().x;
