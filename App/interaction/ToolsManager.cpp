@@ -1,5 +1,6 @@
 #include "ToolsManager.h"
 
+#include "App/interaction/picking/PickingSystem.h"
 #include "App/interaction/tools/AddAtomTool.h"
 #include "App/interaction/tools/CursorTool.h"
 #include "App/interaction/tools/FrameTool.h"
@@ -50,10 +51,10 @@ void ToolsManager::init(GLFWwindow* w, Simulation& sim, std::unique_ptr<IRendere
     sideToolsPanel = &appInterface.sideToolsPanel;
 
     delete pickingSystem;
-    pickingSystem = new PickingSystem(simulation->atoms(), simulation->box(), *renderer);
+    pickingSystem = new PickingSystem(simulation->world(), rend);
 
     toolContext.window = w;
-    toolContext.simulation = &sim;
+    toolContext.world = &sim.world();
     toolContext.renderer = &rend;
     toolContext.pickingSystem = pickingSystem;
     toolContext.uiState = &appInterface.state();

@@ -4,13 +4,13 @@
 #include <cstdint>
 #include <memory>
 
-#include "App/interaction/picking/PickingSystem.h"
 #include "App/interaction/tools/ITool.h"
 #include "Engine/Simulation.h"
 #include "Engine/math/Vec3.h"
 #include "Rendering/BaseRenderer.h"
 
 class World;
+class PickingSystem;
 class SideToolsPanel;
 class Interface;
 struct UiState;

@@ -6,7 +6,6 @@
 
 #include "Engine/math/Vec3.h"
 
-class AtomStorage;
 class IRenderer;
 class PickingSystem;
 class World;
