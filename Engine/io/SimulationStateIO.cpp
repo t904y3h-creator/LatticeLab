@@ -5,7 +5,6 @@
 #include <sstream>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 #include "Engine/Simulation.h"
@@ -64,41 +63,50 @@ namespace {
         file << kBlockIndent << "description " << simulation.sceneDescription() << "\n\n";
 
         file << "[scene]\n";
-        file << kBlockIndent << "box " << simulation.box().size.x << " " << simulation.box().size.y << " " << simulation.box().size.z
-             << "\n";
+        const Vec3f& worldSize = simulation.world().getWorldSize();
+        file << kBlockIndent << "box " << worldSize.x << " " << worldSize.y << " " << worldSize.z << "\n";
         file << kBlockIndent << "step " << simulation.getSimStep() << "\n";
         file << kBlockIndent << "time_ns " << simulation.simTimeNs() << "\n";
         file << kBlockIndent << "dt " << simulation.getDt() << "\n";
-        file << kBlockIndent << "integrator " << static_cast<int>(simulation.getIntegrator()) << "\n";
-        const Vec3f gravity = simulation.getGravity();
+        // TODO переписать
+        // file << kBlockIndent << "integrator " << static_cast<int>(simulation.getIntegrator()) << "\n";
+        const Vec3f gravity = simulation.world().getGravity();
         file << kBlockIndent << "gravity " << gravity.x << " " << gravity.y << " " << gravity.z << "\n";
-        file << kBlockIndent << "bond_formation " << static_cast<int>(simulation.isBondFormationEnabled()) << "\n";
-        file << kBlockIndent << "lj_enabled " << static_cast<int>(simulation.isLJEnabled()) << "\n";
-        file << kBlockIndent << "coulomb_enabled " << static_cast<int>(simulation.isCoulombEnabled()) << "\n";
-        file << kBlockIndent << "cell_size " << simulation.box().grid.cellSize << "\n";
-        file << kBlockIndent << "cutoff_nl " << simulation.getNeighborListCutoff() << "\n";
-        file << kBlockIndent << "skin_nl " << simulation.getNeighborListSkin() << "\n";
+        // file << kBlockIndent << "bond_formation " << static_cast<int>(simulation.world().isBondFormationEnabled()) << "\n";
+        file << kBlockIndent << "lj_enabled " << static_cast<int>(simulation.world().isLJEnabled()) << "\n";
+        file << kBlockIndent << "coulomb_enabled " << static_cast<int>(simulation.world().isCoulombEnabled()) << "\n";
+        file << kBlockIndent << "cell_size " << simulation.world().getGridCellSize() << "\n";
+        // file << kBlockIndent << "cutoff_nl " << simulation.getNeighborListCutoff() << "\n";
+        // file << kBlockIndent << "skin_nl " << simulation.getNeighborListSkin() << "\n";
         file << kBlockIndent << "max_speed " << simulation.getMaxParticleSpeed() << "\n";
         file << kBlockIndent << "accel_damping " << simulation.getAccelDamping() << "\n\n";
 
-        const AtomStorage& atoms = simulation.atoms();
+        const size_t count = simulation.world().atomCount();
+        std::vector<Vec3f> positions(count), velocities(count);
+        std::vector<uint32_t> types(count);
+        std::vector<float> charges(count), invMasses(count);
+        auto& atomBuffers = simulation.world().getAtomBuffers();
+        atomBuffers.downloadPositions(positions);
+        atomBuffers.downloadVelocities(velocities);
+        atomBuffers.downloadAtomType(types);
+        atomBuffers.downloadCharge(charges);
+        atomBuffers.downloadInvMass(invMasses);
         file << "[atoms]\n";
-        file << kBlockIndent << "count " << atoms.size() << "\n";
+        file << kBlockIndent << "count " << count << "\n";
         file << kBlockIndent << "# atom x y z vx vy vz type fixed charge\n";
-        for (size_t atomIndex = 0; atomIndex < atoms.size(); ++atomIndex) {
-            const Vec3f pos = atoms.pos(atomIndex);
-            const Vec3f vel = atoms.vel(atomIndex);
-            file << kBlockIndent << "atom " << pos.x << " " << pos.y << " " << pos.z << " " << vel.x << " " << vel.y << " " << vel.z << " "
-                 << static_cast<int>(atoms.type(atomIndex)) << " " << static_cast<int>(atoms.isAtomFixed(atomIndex)) << " "
-                 << atoms.charge(atomIndex) << "\n";
+        for (size_t i = 0; i < count; ++i) {
+            const bool fixed = invMasses[i] == 0.f;
+            file << kBlockIndent << "atom " << positions[i].x << " " << positions[i].y << " " << positions[i].z << " " << velocities[i].x
+                 << " " << velocities[i].y << " " << velocities[i].z << " " << types[i] << " " << static_cast<int>(fixed) << " "
+                 << charges[i] << "\n";
         }
         file << "\n";
 
-        file << "[bonds]\n";
-        file << kBlockIndent << "count " << simulation.bonds().size() << "\n";
-        for (const Bond& bond : simulation.bonds()) {
-            file << kBlockIndent << "bond " << bond.aIndex << " " << bond.bIndex << "\n";
-        }
+        // file << "[bonds]\n";
+        // file << kBlockIndent << "count " << simulation.bonds().size() << "\n";
+        // for (const Bond& bond : simulation.bonds()) {
+        //     file << kBlockIndent << "bond " << bond.aIndex << " " << bond.bIndex << "\n";
+        // }
     }
 
     void loadLegacyFormat(Simulation& simulation, std::string_view path) {
@@ -107,26 +115,26 @@ namespace {
             return;
         }
 
-        simulation.clear();
+        simulation.world().clear();
 
         std::vector<LoadedAtomData> atoms;
-        Vec3f boxSize{simulation.box().size};
-        int cellSize = simulation.box().grid.cellSize;
+        Vec3f worldSize = simulation.world().getWorldSize();
+        int cellSize = simulation.world().getGridCellSize();
         int loadedStep = 0;
         float loadedTimeNs = 0.0f;
         std::string loadedTitle;
         std::string loadedDescription;
         float loadedDt = simulation.getDt();
-        int loadedIntegrator = static_cast<int>(simulation.getIntegrator());
-        Vec3f loadedGravity = simulation.getGravity();
-        bool loadedBondFormationEnabled = simulation.isBondFormationEnabled();
+        // int loadedIntegrator = static_cast<int>(simulation.getIntegrator());
+        Vec3f loadedGravity = simulation.world().getGravity();
+        // bool loadedBondFormationEnabled = simulation.isBondFormationEnabled();
         float loadedMaxSpeed = simulation.getMaxParticleSpeed();
         float loadedAccelDamping = simulation.getAccelDamping();
 
         std::string tag;
         while (file >> tag) {
             if (tag == "box") {
-                file >> boxSize.x >> boxSize.y >> boxSize.z;
+                file >> worldSize.x >> worldSize.y >> worldSize.z;
             }
             else if (tag == "title") {
                 std::string value;
@@ -147,29 +155,29 @@ namespace {
             else if (tag == "dt") {
                 file >> loadedDt;
             }
-            else if (tag == "integrator") {
-                file >> loadedIntegrator;
-            }
+            // else if (tag == "integrator") {
+            //     file >> loadedIntegrator;
+            // }
             else if (tag == "gravity") {
                 file >> loadedGravity.x >> loadedGravity.y >> loadedGravity.z;
             }
             else if (tag == "bond_formation") {
                 int enabled = 0;
                 file >> enabled;
-                loadedBondFormationEnabled = (enabled != 0);
+                // loadedBondFormationEnabled = (enabled != 0);
             }
             else if (tag == "cell_size") {
                 file >> cellSize;
             }
             else if (tag == "cutoff_nl") {
-                float cutoff = simulation.getNeighborListCutoff();
+                float cutoff; // = simulation.getNeighborListCutoff();
                 file >> cutoff;
-                simulation.setNeighborListCutoff(cutoff);
+                // simulation.setNeighborListCutoff(cutoff);
             }
             else if (tag == "skin_nl") {
-                float skin = simulation.getNeighborListSkin();
+                float skin; // = simulation.getNeighborListSkin();
                 file >> skin;
-                simulation.setNeighborListSkin(skin);
+                // simulation.setNeighborListSkin(skin);
             }
             else if (tag == "max_speed") {
                 file >> loadedMaxSpeed;
@@ -194,21 +202,23 @@ namespace {
             }
         }
 
-        simulation.setSizeBox(boxSize, cellSize);
+        simulation.world().setWorldSize(worldSize);
+        simulation.world().setGridCellSize(cellSize);
         simulation.setDt(loadedDt);
-        simulation.setIntegrator(static_cast<Integrator::Scheme>(loadedIntegrator));
-        simulation.setGravity(loadedGravity);
-        simulation.setBondFormationEnabled(loadedBondFormationEnabled);
+        // simulation.setIntegrator(static_cast<Integrator::Scheme>(loadedIntegrator));
+        simulation.world().setGravity(loadedGravity);
+        // simulation.setBondFormationEnabled(loadedBondFormationEnabled);
         simulation.setMaxParticleSpeed(loadedMaxSpeed);
         simulation.setAccelDamping(loadedAccelDamping);
         simulation.setSceneTitle(loadedTitle);
         simulation.setSceneDescription(loadedDescription);
 
-        simulation.reserveAtoms(atoms.size());
-        for (const LoadedAtomData& atom : atoms) {
-            simulation.appendAtomFast(atom.coords, atom.speed, static_cast<AtomData::Type>(atom.type), atom.fixed);
-        }
-        simulation.finalizeAtomBatch();
+        // TODO переписать
+        // simulation.reserveAtoms(atoms.size());
+        // for (const LoadedAtomData& atom : atoms) {
+        //     simulation.appendAtomFast(atom.coords, atom.speed, static_cast<AtomData::Type>(atom.type), atom.fixed);
+        // }
+        // simulation.finalizeAtomBatch();
         simulation.restoreRuntimeState(loadedStep, loadedTimeNs);
     }
 
@@ -218,20 +228,20 @@ namespace {
             return;
         }
 
-        simulation.clear();
+        simulation.world().clear();
 
-        Vec3f boxSize{simulation.box().size};
-        int cellSize = simulation.box().grid.cellSize;
+        Vec3f boxSize = simulation.world().getWorldSize();
+        int cellSize = simulation.world().getGridCellSize();
         int loadedStep = 0;
         float loadedTimeNs = 0.0f;
         std::string loadedTitle;
         std::string loadedDescription;
         float loadedDt = simulation.getDt();
-        int loadedIntegrator = static_cast<int>(simulation.getIntegrator());
-        Vec3f loadedGravity = simulation.getGravity();
-        bool loadedBondFormationEnabled = simulation.isBondFormationEnabled();
-        bool loadedLJEnabled = simulation.isLJEnabled();
-        bool loadedCoulombEnabled = simulation.isCoulombEnabled();
+        // int loadedIntegrator = static_cast<int>(simulation.getIntegrator());
+        Vec3f loadedGravity = simulation.world().getGravity();
+        // bool loadedBondFormationEnabled = simulation.isBondFormationEnabled();
+        bool loadedLJEnabled = simulation.world().isLJEnabled();
+        bool loadedCoulombEnabled = simulation.world().isCoulombEnabled();
         float loadedMaxSpeed = simulation.getMaxParticleSpeed();
         float loadedAccelDamping = simulation.getAccelDamping();
 
@@ -278,7 +288,7 @@ namespace {
                 stream >> loadedDt;
             }
             else if (tag == "integrator") {
-                stream >> loadedIntegrator;
+                // stream >> loadedIntegrator;
             }
             else if (tag == "gravity") {
                 stream >> loadedGravity.x >> loadedGravity.y >> loadedGravity.z;
@@ -286,7 +296,7 @@ namespace {
             else if (tag == "bond_formation") {
                 int enabled = 0;
                 stream >> enabled;
-                loadedBondFormationEnabled = (enabled != 0);
+                // loadedBondFormationEnabled = (enabled != 0);
             }
             else if (tag == "lj_enabled") {
                 int enabled = 0;
@@ -302,14 +312,14 @@ namespace {
                 stream >> cellSize;
             }
             else if (tag == "cutoff_nl") {
-                float cutoff = simulation.getNeighborListCutoff();
+                float cutoff; // = simulation.getNeighborListCutoff();
                 stream >> cutoff;
-                simulation.setNeighborListCutoff(cutoff);
+                // simulation.setNeighborListCutoff(cutoff);
             }
             else if (tag == "skin_nl") {
-                float skin = simulation.getNeighborListSkin();
+                float skin; // = simulation.getNeighborListSkin();
                 stream >> skin;
-                simulation.setNeighborListSkin(skin);
+                // simulation.setNeighborListSkin(skin);
             }
             else if (tag == "max_speed") {
                 stream >> loadedMaxSpeed;
@@ -339,29 +349,31 @@ namespace {
             }
         }
 
-        simulation.setSizeBox(boxSize, cellSize);
+        simulation.world().setWorldSize(boxSize);
+        simulation.world().setGridCellSize(cellSize);
         simulation.setDt(loadedDt);
-        simulation.setIntegrator(static_cast<Integrator::Scheme>(loadedIntegrator));
-        simulation.setGravity(loadedGravity);
-        simulation.setBondFormationEnabled(loadedBondFormationEnabled);
-        simulation.setLJEnabled(loadedLJEnabled);
-        simulation.setCoulombEnabled(loadedCoulombEnabled);
+        // simulation.setIntegrator(static_cast<Integrator::Scheme>(loadedIntegrator));
+        simulation.world().setGravity(loadedGravity);
+        // simulation.setBondFormationEnabled(loadedBondFormationEnabled);
+        simulation.world().setLJEnabled(loadedLJEnabled);
+        simulation.world().setCoulombEnabled(loadedCoulombEnabled);
         simulation.setMaxParticleSpeed(loadedMaxSpeed);
         simulation.setAccelDamping(loadedAccelDamping);
         simulation.setSceneTitle(loadedTitle);
         simulation.setSceneDescription(loadedDescription);
 
-        simulation.reserveAtoms(atoms.size());
-        for (const LoadedAtomData& atom : atoms) {
-            simulation.appendAtomFast(atom.coords, atom.speed, static_cast<AtomData::Type>(atom.type), atom.fixed);
-        }
-        simulation.finalizeAtomBatch();
-        for (size_t i = 0; i < atoms.size(); ++i) {
-            simulation.atoms().charge(i) = atoms[i].charge;
-        }
-        for (const auto& [aIndex, bIndex] : bonds) {
-            simulation.addBond(aIndex, bIndex);
-        }
+        // TODO переписать
+        // simulation.reserveAtoms(atoms.size());
+        // for (const LoadedAtomData& atom : atoms) {
+        //     simulation.appendAtomFast(atom.coords, atom.speed, static_cast<AtomData::Type>(atom.type), atom.fixed);
+        // }
+        // simulation.finalizeAtomBatch();
+        // for (size_t i = 0; i < atoms.size(); ++i) {
+        //     simulation.atoms().charge(i) = atoms[i].charge;
+        // }
+        // for (const auto& [aIndex, bIndex] : bonds) {
+        //     simulation.addBond(aIndex, bIndex);
+        // }
 
         simulation.restoreRuntimeState(loadedStep, loadedTimeNs);
     }

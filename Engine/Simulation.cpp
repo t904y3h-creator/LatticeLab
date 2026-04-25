@@ -1,6 +1,6 @@
 #include "Simulation.h"
 
-Simulation::Simulation(World& world) : world_(world) { pipeline_.init(world_); }
+Simulation::Simulation(World& world) : world_(world), pipeline_(world) {}
 
 void Simulation::step() {
     if (!pipeline_.isReady() || world_.atomCount() == 0) {
