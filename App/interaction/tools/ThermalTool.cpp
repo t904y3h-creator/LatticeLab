@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include "Engine/Simulation.h"
 #include "Rendering/BaseRenderer.h"
 #include "Rendering/camera/Camera.h"
 
@@ -41,7 +40,7 @@ void ThermalTool::setStrength(float strength) noexcept { strength_ = std::clamp(
 
 void ThermalTool::applyAt(Vec2i mousePos, float deltaTime) {
     ToolContext& ctx = context();
-    if (!ctx.isValid() || strength_ <= 0.0f) {
+    if (!ctx.isValid() || strength_ <= 0.f) {
         return;
     }
 
@@ -50,39 +49,35 @@ void ThermalTool::applyAt(Vec2i mousePos, float deltaTime) {
         return;
     }
 
-    AtomStorage& atoms = ctx.simulation->atoms();
-    if (atoms.empty()) {
+    World& world = *ctx.world;
+    const size_t mobileCount = world.mobileCount();
+    if (mobileCount == 0) {
         return;
     }
+
+    // TODO: заменить на compute шейдер
+    std::vector<Vec3f> velocities(world.atomCount());
+    world.getAtomBuffers().downloadVelocities(velocities);
 
     const Vec3f center = screenToWorld(mousePos);
     const float radiusSqr = radius_ * radius_;
     const bool is2D = renderer->camera.getMode() == Camera::Mode::Mode2D;
-
-    float* const vx = atoms.vxData();
-    float* const vy = atoms.vyData();
-    float* const vz = atoms.vzData();
-
-    const float sign = (mode_ == Mode::Heat) ? 1.0f : -1.0f;
+    const float sign = (mode_ == Mode::Heat) ? 1.f : -1.f;
     const float amount = strength_ * deltaTime;
 
-    for (size_t i = 0; i < atoms.mobileCount(); ++i) {
-        const Vec3f pos = atoms.pos(i);
-        const float dx = static_cast<float>(pos.x - center.x);
-        const float dy = static_cast<float>(pos.y - center.y);
-        const float dz = is2D ? 0.0f : static_cast<float>(pos.z - center.z);
+    for (size_t i = 0; i < mobileCount; ++i) {
+        const float dx = velocities[i].x - center.x;
+        const float dy = velocities[i].y - center.y;
+        const float dz = is2D ? 0.f : velocities[i].z - center.z;
         const float distSqr = dx * dx + dy * dy + dz * dz;
         if (distSqr > radiusSqr) {
             continue;
         }
 
-        const float dist = std::sqrt(std::max(distSqr, 0.0f));
-        const float falloff = 1.0f - dist / radius_;
-        const float factor = 1.0f + sign * amount * falloff;
-        const float clampedFactor = std::max(0.0f, factor);
-
-        vx[i] *= clampedFactor;
-        vy[i] *= clampedFactor;
-        vz[i] *= clampedFactor;
+        const float falloff = 1.f - std::sqrt(distSqr) / radius_;
+        const float clampedFactor = std::max(0.f, 1.f + sign * amount * falloff);
+        velocities[i] *= clampedFactor;
     }
+
+    world.getAtomBuffers().uploadVelocities(velocities);
 }
