@@ -10,7 +10,7 @@ class Simulation {
 public:
     explicit Simulation(World& world);
 
-    void step();
+    void step(wgpu::CommandEncoder encoder);
 
     void setDt(float dt) { dt_ = dt; }
     float getDt() const { return dt_; }

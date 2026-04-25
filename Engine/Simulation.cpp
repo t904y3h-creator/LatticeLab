@@ -1,8 +1,10 @@
 #include "Simulation.h"
 
+#include <webgpu/webgpu.hpp>
+
 Simulation::Simulation(World& world) : world_(world), pipeline_(world) {}
 
-void Simulation::step() {
+void Simulation::step(wgpu::CommandEncoder encoder) {
     if (!pipeline_.isReady() || world_.atomCount() == 0) {
         return;
     }
@@ -12,7 +14,7 @@ void Simulation::step() {
     params.accelDamping = accelDamping_;
     params.maxParticleSpeed = maxParticleSpeed_;
 
-    pipeline_.step(world_, params);
+    pipeline_.step(encoder, world_, params);
 
     simStep_++;
     simTimeNs_ += dt_;

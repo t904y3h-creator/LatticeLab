@@ -95,11 +95,13 @@ namespace AppActions {
     }
 
     void Handler::trackKeyboard(Simulation& simulation) {
-        track(AppSignals::Keyboard::StepPhysics.connect([&]() { simulation.step(); }));
+        // TODO переписать
+        // track(AppSignals::Keyboard::StepPhysics.connect([&]() { simulation.step(); }));
     }
 
     void Handler::trackSimControlPanel(Simulation& simulation) {
-        track(AppSignals::UI::StepPhysics.connect([&]() { simulation.step(); }));
+        // TODO переписать
+        // track(AppSignals::UI::StepPhysics.connect([&]() { simulation.step(); }));
     }
 
     Handler::Handler(GLFWwindow* window, CaptureController& captureController, Simulation& simulation, std::unique_ptr<IRenderer>& renderer,

@@ -4,76 +4,46 @@
 #include <cassert>
 #include <span>
 
-#include <webgpu/webgpu.hpp>
-
 #include "Engine/gpu/GpuAtomBuffers.h"
 #include "Engine/gpu/WGPUContext.h"
 #include "generated/shaders/step_ops.wgsl.h"
 
-struct ConfineUniforms {
-    float maxX, maxY, maxZ;
-    float restitution;
-    uint32_t atomCount;
-    uint32_t _pad[3];
-};
-static_assert(sizeof(ConfineUniforms) == 32);
-
-struct VelCapUniforms {
-    float maxSpeedSqr;
-    float maxSpeed;
-    uint32_t atomCount;
-    uint32_t _pad;
-};
-static_assert(sizeof(VelCapUniforms) == 16);
-
-GpuStepOps::GpuStepOps() { buildPipelines(); }
-
 void GpuStepOps::buildPipelines() {
     WGPUShaderSourceWGSL wgslDesc{};
-    wgslDesc.chain.sType = WGPUSType_ShaderSourceWGSL;
+    wgslDesc.chain.sType = wgpu::SType::ShaderSourceWGSL;
     wgslDesc.code = wgpu::StringView(step_opsWGSL);
     wgpu::ShaderModuleDescriptor smDesc{};
     smDesc.nextInChain = &wgslDesc.chain;
     shaderModule_ = WGPUContext::instance().device().createShaderModule(smDesc);
 
-    auto makeUB = [&](size_t bytes, std::string_view label) -> wgpu::Buffer {
-        wgpu::BufferDescriptor d{};
-        d.label = wgpu::StringView(label);
-        d.size = bytes;
-        d.usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst;
-        d.mappedAtCreation = false;
-        return WGPUContext::instance().device().createBuffer(d);
-    };
-
-    auto makeStorageBGLE = [](uint32_t binding, wgpu::BufferBindingType type) -> wgpu::BindGroupLayoutEntry {
+    auto makeStorageBGLE = [](uint32_t binding, wgpu::BufferBindingType type) {
         wgpu::BindGroupLayoutEntry e{};
         e.binding = binding;
         e.visibility = wgpu::ShaderStage::Compute;
         e.buffer.type = type;
         e.buffer.hasDynamicOffset = false;
-        e.buffer.minBindingSize = 0;
         return e;
     };
 
-    auto makeUniformBGLE = [](uint32_t binding, uint64_t minSize) -> wgpu::BindGroupLayoutEntry {
+    auto makeUniformBGLE = [](uint32_t binding, uint64_t minSize) {
         wgpu::BindGroupLayoutEntry e{};
         e.binding = binding;
         e.visibility = wgpu::ShaderStage::Compute;
         e.buffer.type = wgpu::BufferBindingType::Uniform;
-        e.buffer.hasDynamicOffset = false;
+        e.buffer.hasDynamicOffset = true;
         e.buffer.minBindingSize = minSize;
         return e;
     };
 
-    auto makeBGL = [&](std::span<wgpu::BindGroupLayoutEntry> entries, std::string_view label) -> wgpu::BindGroupLayout {
+    auto makeBGL = [&](std::span<wgpu::BindGroupLayoutEntry> entries, std::string_view label) {
         wgpu::BindGroupLayoutDescriptor d{};
         d.label = wgpu::StringView(label);
-        d.entryCount = static_cast<uint32_t>(entries.size());
+        d.entryCount = entries.size();
         d.entries = entries.data();
         return WGPUContext::instance().device().createBindGroupLayout(d);
     };
 
-    auto makePipelineLayout = [&](wgpu::BindGroupLayout bgl) -> wgpu::PipelineLayout {
+    auto makePipelineLayout = [&](wgpu::BindGroupLayout bgl) {
         WGPUBindGroupLayout raw = bgl;
         wgpu::PipelineLayoutDescriptor d{};
         d.bindGroupLayoutCount = 1;
@@ -81,7 +51,7 @@ void GpuStepOps::buildPipelines() {
         return WGPUContext::instance().device().createPipelineLayout(d);
     };
 
-    auto makePipeline = [&](wgpu::PipelineLayout layout, std::string_view entry, std::string_view label) -> wgpu::ComputePipeline {
+    auto makePipeline = [&](wgpu::PipelineLayout layout, std::string_view entry, std::string_view label) {
         wgpu::ComputePipelineDescriptor d{};
         d.label = wgpu::StringView(label);
         d.layout = layout;
@@ -90,110 +60,98 @@ void GpuStepOps::buildPipelines() {
         return WGPUContext::instance().device().createComputePipeline(d);
     };
 
-    // confine_to_box: group(0) — uniform, pos (rw), vel (rw)
+    // confine
     {
         std::array<wgpu::BindGroupLayoutEntry, 3> entries{
             makeUniformBGLE(0, sizeof(ConfineUniforms)),
             makeStorageBGLE(1, wgpu::BufferBindingType::Storage),
             makeStorageBGLE(2, wgpu::BufferBindingType::Storage),
         };
-        bgl_confine_ = makeBGL(entries, "confineToBox_BindGroupLayout");
+        bgl_confine_ = makeBGL(entries, "confine_BGL");
         layout_confine_ = makePipelineLayout(bgl_confine_);
-        pipeline_confine_ = makePipeline(layout_confine_, "confine_to_box", "confineToBox_Pipeline");
-        ub_confine_ = makeUB(sizeof(ConfineUniforms), "ConfineUniforms");
+        pipeline_confine_ = makePipeline(layout_confine_, "confine_to_box", "confine_Pipeline");
     }
 
-    // post_process_vel: group(1) — uniform, vel (rw)
+    // velcap
     {
         std::array<wgpu::BindGroupLayoutEntry, 2> entries{
             makeUniformBGLE(0, sizeof(VelCapUniforms)),
             makeStorageBGLE(1, wgpu::BufferBindingType::Storage),
         };
-        bgl_velcap_ = makeBGL(entries, "postProcessVel_BindGroupLayout");
+        bgl_velcap_ = makeBGL(entries, "velcap_BGL");
         layout_velcap_ = makePipelineLayout(bgl_velcap_);
-        pipeline_velcap_ = makePipeline(layout_velcap_, "post_process_vel", "postProcessVel_Pipeline");
-        ub_velcap_ = makeUB(sizeof(VelCapUniforms), "VelCapUniforms");
+        pipeline_velcap_ = makePipeline(layout_velcap_, "post_process_vel", "velcap_Pipeline");
     }
 }
 
-wgpu::BindGroup GpuStepOps::makeConfineBindGroup(const GpuAtomBuffers& buffers) const {
+void GpuStepOps::prepare(const GpuAtomBuffers& buffers) {
     const size_t vec4Bytes = buffers.countAtoms() * 4 * sizeof(float);
 
-    std::array<wgpu::BindGroupEntry, 3> entries{};
-    entries[0].binding = 0;
-    entries[0].buffer = ub_confine_;
-    entries[0].offset = 0;
-    entries[0].size = sizeof(ConfineUniforms);
+    auto makeBE = [](uint32_t binding, wgpu::Buffer buf, size_t size) {
+        wgpu::BindGroupEntry e{};
+        e.binding = binding;
+        e.buffer = buf;
+        e.offset = 0;
+        e.size = size;
+        return e;
+    };
 
-    entries[1].binding = 1;
-    entries[1].buffer = buffers.bufPos();
-    entries[1].offset = 0;
-    entries[1].size = vec4Bytes;
+    // confine bindgroup
+    {
+        std::array<wgpu::BindGroupEntry, 3> entries{
+            makeBE(0, sharedUniforms_, sizeof(ConfineUniforms)),
+            makeBE(1, buffers.bufPos(), vec4Bytes),
+            makeBE(2, buffers.bufVel(), vec4Bytes),
+        };
+        wgpu::BindGroupDescriptor d{};
+        d.label = wgpu::StringView("confine_BindGroup");
+        d.layout = bgl_confine_;
+        d.entryCount = entries.size();
+        d.entries = entries.data();
+        bindGroupConfine_ = WGPUContext::instance().device().createBindGroup(d);
+    }
 
-    entries[2].binding = 2;
-    entries[2].buffer = buffers.bufVel();
-    entries[2].offset = 0;
-    entries[2].size = vec4Bytes;
-
-    wgpu::BindGroupDescriptor d{};
-    d.layout = bgl_confine_;
-    d.entryCount = static_cast<uint32_t>(entries.size());
-    d.entries = entries.data();
-    return WGPUContext::instance().device().createBindGroup(d);
+    // velcap bindgroup
+    {
+        std::array<wgpu::BindGroupEntry, 2> entries{
+            makeBE(0, sharedUniforms_, sizeof(VelCapUniforms)),
+            makeBE(1, buffers.bufVel(), vec4Bytes),
+        };
+        wgpu::BindGroupDescriptor d{};
+        d.label = wgpu::StringView("velcap_BindGroup");
+        d.layout = bgl_velcap_;
+        d.entryCount = entries.size();
+        d.entries = entries.data();
+        bindGroupVelCap_ = WGPUContext::instance().device().createBindGroup(d);
+    }
 }
 
-wgpu::BindGroup GpuStepOps::makeVelCapBindGroup(const GpuAtomBuffers& buffers) const {
-    const size_t vec4Bytes = buffers.countAtoms() * 4 * sizeof(float);
-
-    std::array<wgpu::BindGroupEntry, 2> entries{};
-    entries[0].binding = 0;
-    entries[0].buffer = ub_velcap_;
-    entries[0].offset = 0;
-    entries[0].size = sizeof(VelCapUniforms);
-
-    entries[1].binding = 1;
-    entries[1].buffer = buffers.bufVel();
-    entries[1].offset = 0;
-    entries[1].size = vec4Bytes;
-
-    wgpu::BindGroupDescriptor d{};
-    d.layout = bgl_velcap_;
-    d.entryCount = static_cast<uint32_t>(entries.size());
-    d.entries = entries.data();
-    return WGPUContext::instance().device().createBindGroup(d);
-}
-
-void GpuStepOps::recordConfine(wgpu::CommandEncoder enc, const GpuAtomBuffers& buffers, uint32_t atomCount, Vec3f max) {
+void GpuStepOps::recordConfine(wgpu::CommandEncoder enc, uint32_t atomCount) {
     assert(isReady());
-
-    ConfineUniforms uni{max.x, max.y, max.z, 0.8f, atomCount, {0, 0, 0}};
-    WGPUContext::instance().queue().writeBuffer(ub_confine_, 0, &uni, sizeof(uni));
-
-    wgpu::BindGroup bg = makeConfineBindGroup(buffers);
+    assert(bindGroupConfine_ != nullptr);
 
     wgpu::ComputePassDescriptor pd{};
     pd.label = wgpu::StringView("confine_to_box pass");
     auto pass = enc.beginComputePass(pd);
     pass.setPipeline(pipeline_confine_);
-    pass.setBindGroup(0, bg, 0, nullptr);
+
+    uint32_t dynOffset = kConfineOffset;
+    pass.setBindGroup(0, bindGroupConfine_, 1, &dynOffset);
     pass.dispatchWorkgroups((atomCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
     pass.end();
 }
 
-void GpuStepOps::recordVelCap(wgpu::CommandEncoder enc, const GpuAtomBuffers& buffers, uint32_t atomCount, float maxSpeed) {
+void GpuStepOps::recordVelCap(wgpu::CommandEncoder enc, uint32_t atomCount) {
     assert(isReady());
-    assert(maxSpeed > 0.0f);
-
-    VelCapUniforms uni{maxSpeed * maxSpeed, maxSpeed, atomCount, 0u};
-    WGPUContext::instance().queue().writeBuffer(ub_velcap_, 0, &uni, sizeof(uni));
-
-    wgpu::BindGroup bg = makeVelCapBindGroup(buffers);
+    assert(bindGroupVelCap_ != nullptr);
 
     wgpu::ComputePassDescriptor pd{};
     pd.label = wgpu::StringView("post_process_vel pass");
     auto pass = enc.beginComputePass(pd);
     pass.setPipeline(pipeline_velcap_);
-    pass.setBindGroup(0, bg, 0, nullptr);
+
+    uint32_t dynOffset = kVelCapOffset;
+    pass.setBindGroup(0, bindGroupVelCap_, 1, &dynOffset);
     pass.dispatchWorkgroups((atomCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
     pass.end();
 }

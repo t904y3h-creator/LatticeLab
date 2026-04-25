@@ -41,11 +41,14 @@ public:
 
     bool isReady() const { return ready_; }
 
-    void step(const World& world, const GpuStepParams& params);
+    void step(wgpu::CommandEncoder encoder, const World& world, const GpuStepParams& params);
 
 private:
     void clearForcesAndEnergy(wgpu::CommandEncoder enc, const World& world);
+    void prepare(const World& world);
+    wgpu::Buffer createSharedUniformBuffer();
 
+    wgpu::Buffer sharedUniforms_;
     GpuVerletPredict gpuPredict_;
     GpuVerletCorrect gpuCorrect_;
     GpuStepOps gpuStepOps_;

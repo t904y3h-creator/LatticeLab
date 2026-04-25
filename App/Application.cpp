@@ -39,6 +39,8 @@ int Application::run() {
 
     // инициализация систем
     World world(Vec3f(50, 50, 6), 0);
+    Scenes::crystal(world, 100, AtomData::Type::Z, false);
+
     Simulation simulation(world);
     CaptureController captureController;
 
@@ -71,9 +73,6 @@ int Application::run() {
     appInterface.state().simulationSpeed = 100.0f;
     appInterface.state().pause = true;
 
-    // создание сцены
-    Scenes::crystal(world, 50, AtomData::Type::Z, false);
-
     auto startTime = Clock::now();
     double renderAccum = 0.0;
     double physicsAccum = 0.0;
@@ -87,11 +86,10 @@ int Application::run() {
     while (!glfwWindowShouldClose(window)) {
         Profiler::instance().beginFrame();
 
-        auto currentTime = Clock::now();
+        const auto currentTime = Clock::now();
         const float deltaTime = std::chrono::duration<float>(currentTime - startTime).count();
         startTime = currentTime;
 
-        UiState& uiState = appInterface.state();
         physicsAccum += deltaTime;
         renderAccum += deltaTime;
         logAccum += deltaTime;
@@ -99,19 +97,30 @@ int Application::run() {
         EventManager::poll();
         EventManager::frame(deltaTime);
         captureController.update(deltaTime);
-        captureController.syncUiState(uiState);
+        captureController.syncUiState(appInterface.state());
         captureController.handleToggleShortcut();
 
-        // обновление физики
+        UiState& uiState = appInterface.state();
+        WGPUContext& ctx = WGPUContext::instance();
+
+        static std::array<wgpu::CommandBuffer, 2> submitBatch;
+        uint32_t submitCount = 0;
+
+        // Физика
         const double physicsInterval = 1.0 / uiState.simulationSpeed;
         if (physicsAccum >= physicsInterval) {
+            physicsAccum -= physicsInterval;
+
             if (!uiState.pause) {
-                simulation.step();
+                wgpu::CommandEncoderDescriptor desc;
+                desc.label = wgpu::StringView("PhysicsEncoder");
+                wgpu::CommandEncoder physEnc = ctx.device().createCommandEncoder(desc);
+                simulation.step(physEnc);
+                submitBatch[submitCount++] = physEnc.finish({});
             }
-            physicsAccum = 0.0;
         }
 
-        // отрисовка кадра
+        // Рендер
         if (renderAccum >= renderInterval) {
             PROFILE_SCOPE("Application::RenderFrame");
             renderAccum -= renderInterval;
@@ -120,30 +129,40 @@ int Application::run() {
             appInterface.update();
             refreshAtomDebugViews(debugViews, simulation);
 
-            WGPUContext& ctx = WGPUContext::instance();
-
             wgpu::SurfaceTexture surfaceTex;
             ctx.surface().getCurrentTexture(&surfaceTex);
             wgpu::Texture surfaceTexture(surfaceTex.texture);
-
             wgpu::TextureView renderTarget = captureController.acquireRenderTarget(surfaceTexture);
 
-            wgpu::CommandEncoder enc = ctx.device().createCommandEncoder({});
-            renderer->drawShot(enc, renderTarget, ctx.depthView(), world);
+            wgpu::CommandEncoderDescriptor desc;
+            desc.label = wgpu::StringView("RenderEncoder");
+            wgpu::CommandEncoder renderEnc = ctx.device().createCommandEncoder(desc);
+
+            renderer->drawShot(renderEnc, renderTarget, ctx.depthView(), world);
             ToolsManager::pickingSystem->getOverlay().draw();
+
             ImGui::Render();
             auto* wgpuRenderer = static_cast<RendererWGPU*>(renderer.get());
             ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), wgpuRenderer->getCurrentPass());
             wgpuRenderer->getCurrentPass().end();
             wgpuRenderer->getCurrentPass() = nullptr;
-            // renderer->endFrame();
-            wgpu::CommandBuffer cmd = enc.finish({});
-            ctx.queue().submit(1, &cmd);
+
+            submitBatch[submitCount++] = renderEnc.finish({});
+
+            ctx.queue().submit(submitCount, submitBatch.data());
+            submitCount = 0;
 
             captureController.onFrameRendered(surfaceTexture);
             ctx.present();
-            ctx.processEvents();
         }
+
+        // физика без рендера в этом кадре
+        if (submitCount > 0) {
+            ctx.queue().submit(submitCount, submitBatch.data());
+            submitCount = 0;
+        }
+
+        submitBatch.fill(nullptr);
 
         Profiler::instance().endFrame();
 

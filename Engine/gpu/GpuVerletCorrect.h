@@ -8,7 +8,16 @@ class GpuAtomBuffers;
 
 class GpuVerletCorrect {
 public:
-    GpuVerletCorrect();
+    struct Uniforms {
+        float dt;
+        float accelDamping;
+        uint32_t atomCount;
+        uint32_t pad;
+    };
+    static_assert(sizeof(Uniforms) == 16);
+    static constexpr uint32_t kUniformOffset = 1536;
+
+    GpuVerletCorrect(wgpu::Buffer sharedUniforms) : sharedUniforms_(sharedUniforms) { buildPipeline(); }
 
     GpuVerletCorrect(const GpuVerletCorrect&) = delete;
     GpuVerletCorrect& operator=(const GpuVerletCorrect&) = delete;
@@ -17,21 +26,18 @@ public:
 
     bool isReady() const { return pipeline_ != nullptr; }
 
-    // Выполняет шейдер correct для atomCount атомов.
-    // Перед вызовом в buffers должны быть загружены:
-    //   uploadVelocities, uploadForces, uploadPrevForces, uploadInvMass.
-    // После вызова скорости обновлены; скачивайте downloadVelocities.
-    void record(wgpu::CommandEncoder& enc, const GpuAtomBuffers& buffers, uint32_t atomCount, float dt, float accelDamping);
+    void record(wgpu::CommandEncoder& enc, uint32_t atomCount);
+    void prepare(const GpuAtomBuffers& buffers);
 
 private:
     void buildPipeline();
-    wgpu::BindGroup makeBindGroup(const GpuAtomBuffers& buffers) const;
 
+    wgpu::Buffer sharedUniforms_;
+    wgpu::BindGroup bindGroup_ = nullptr;
     wgpu::ShaderModule shaderModule_ = nullptr;
     wgpu::BindGroupLayout bindGroupLayout_ = nullptr;
     wgpu::PipelineLayout pipelineLayout_ = nullptr;
     wgpu::ComputePipeline pipeline_ = nullptr;
-    wgpu::Buffer uniformBuffer_ = nullptr;
 
     static constexpr uint32_t kWorkgroupSize = 64;
 };

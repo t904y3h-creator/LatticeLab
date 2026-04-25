@@ -20,7 +20,7 @@
 namespace {
     wgpu::ShaderModule createShaderModule(std::string_view wgsl, std::string_view label) {
         WGPUShaderSourceWGSL wgslDesc{};
-        wgslDesc.chain.sType = WGPUSType_ShaderSourceWGSL;
+        wgslDesc.chain.sType = wgpu::SType::ShaderSourceWGSL;
         wgslDesc.code = wgpu::StringView(wgsl);
 
         wgpu::ShaderModuleDescriptor desc{};

@@ -81,7 +81,6 @@ void World::addAtoms(std::span<const Vec3f> positions, std::span<const Vec3f> ve
     pe.insert(pe.begin() + mobileCount_, addCount, 0.f);
     typ.insert(typ.begin() + mobileCount_, types.begin(), types.end());
 
-    // инициализируем из AtomData
     for (size_t i = 0; i < addCount; ++i) {
         const auto& props = AtomData::getProps(static_cast<AtomData::Type>(types[i]));
         invMasses.insert(invMasses.begin() + mobileCount_ + i, 1.f / props.mass);
@@ -111,7 +110,6 @@ void World::addStaticAtoms(std::span<const Vec3f> positions, std::span<const uin
     pe.insert(pe.end(), addCount, 0.f);
     typ.insert(typ.end(), types.begin(), types.end());
 
-    // статичные: invMass=0, остальное из AtomData
     for (size_t i = 0; i < addCount; ++i) {
         const auto& props = AtomData::getProps(static_cast<AtomData::Type>(types[i]));
         invMasses.emplace_back(1.f / props.mass);

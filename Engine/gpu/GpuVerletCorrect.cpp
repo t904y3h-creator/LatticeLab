@@ -8,11 +8,9 @@
 #include "Engine/gpu/WGPUContext.h"
 #include "generated/shaders/verlet_correct.wgsl.h"
 
-GpuVerletCorrect::GpuVerletCorrect() { buildPipeline(); }
-
 void GpuVerletCorrect::buildPipeline() {
     WGPUShaderSourceWGSL wgslDesc{};
-    wgslDesc.chain.sType = WGPUSType_ShaderSourceWGSL;
+    wgslDesc.chain.sType = wgpu::SType::ShaderSourceWGSL;
     wgslDesc.code = wgpu::StringView(verlet_correctWGSL);
 
     wgpu::ShaderModuleDescriptor smDesc{};
@@ -22,20 +20,20 @@ void GpuVerletCorrect::buildPipeline() {
 
     std::array<wgpu::BindGroupLayoutEntry, 5> bglEntries{};
 
-    auto makeStorageEntry = [](uint32_t binding, wgpu::BufferBindingType type) -> wgpu::BindGroupLayoutEntry {
+    bglEntries[0].binding = 0;
+    bglEntries[0].visibility = wgpu::ShaderStage::Compute;
+    bglEntries[0].buffer.type = wgpu::BufferBindingType::Uniform;
+    bglEntries[0].buffer.hasDynamicOffset = true;
+    bglEntries[0].buffer.minBindingSize = sizeof(Uniforms);
+
+    auto makeStorageEntry = [](uint32_t binding, wgpu::BufferBindingType type) {
         wgpu::BindGroupLayoutEntry e{};
         e.binding = binding;
         e.visibility = wgpu::ShaderStage::Compute;
         e.buffer.type = type;
         e.buffer.hasDynamicOffset = false;
-        e.buffer.minBindingSize = 0;
         return e;
     };
-
-    bglEntries[0].binding = 0;
-    bglEntries[0].visibility = wgpu::ShaderStage::Compute;
-    bglEntries[0].buffer.type = wgpu::BufferBindingType::Uniform;
-    bglEntries[0].buffer.minBindingSize = 16;
     bglEntries[1] = makeStorageEntry(1, wgpu::BufferBindingType::Storage);
     bglEntries[2] = makeStorageEntry(2, wgpu::BufferBindingType::ReadOnlyStorage);
     bglEntries[3] = makeStorageEntry(3, wgpu::BufferBindingType::ReadOnlyStorage);
@@ -43,92 +41,66 @@ void GpuVerletCorrect::buildPipeline() {
 
     wgpu::BindGroupLayoutDescriptor bglDesc{};
     bglDesc.label = wgpu::StringView("VerletCorrect_BindGroupLayout");
-    bglDesc.entryCount = static_cast<uint32_t>(bglEntries.size());
+    bglDesc.entryCount = bglEntries.size();
     bglDesc.entries = bglEntries.data();
     bindGroupLayout_ = WGPUContext::instance().device().createBindGroupLayout(bglDesc);
 
-    // 3. Pipeline layout
     WGPUBindGroupLayout rawBGL = bindGroupLayout_;
-
     wgpu::PipelineLayoutDescriptor plDesc{};
     plDesc.label = wgpu::StringView("VerletCorrect_PipelineLayout");
     plDesc.bindGroupLayoutCount = 1;
     plDesc.bindGroupLayouts = &rawBGL;
     pipelineLayout_ = WGPUContext::instance().device().createPipelineLayout(plDesc);
 
-    // 4. Compute pipeline
     wgpu::ComputePipelineDescriptor cpDesc{};
     cpDesc.label = wgpu::StringView("VerletCorrect_Pipeline");
     cpDesc.layout = pipelineLayout_;
     cpDesc.compute.module = shaderModule_;
     cpDesc.compute.entryPoint = wgpu::StringView("main");
     pipeline_ = WGPUContext::instance().device().createComputePipeline(cpDesc);
-
-    // 5. Uniform buffer (16 байт: dt, accelDamping, atomCount, pad)
-    wgpu::BufferDescriptor ubDesc{};
-    ubDesc.label = wgpu::StringView("VerletCorrect_Uniforms");
-    ubDesc.size = 16;
-    ubDesc.usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst;
-    ubDesc.mappedAtCreation = false;
-    uniformBuffer_ = WGPUContext::instance().device().createBuffer(ubDesc);
 }
 
-wgpu::BindGroup GpuVerletCorrect::makeBindGroup(const GpuAtomBuffers& buffers) const {
+void GpuVerletCorrect::prepare(const GpuAtomBuffers& buffers) {
     const size_t vec4Bytes = buffers.countAtoms() * 4 * sizeof(float);
     const size_t f32Bytes = buffers.countAtoms() * sizeof(float);
 
-    std::array<wgpu::BindGroupEntry, 5> entries{};
-
-    auto makeStorageBE = [](uint32_t binding, wgpu::Buffer buf, size_t bytes) -> wgpu::BindGroupEntry {
+    auto makeBE = [](uint32_t binding, wgpu::Buffer buf, size_t size, size_t offset = 0) {
         wgpu::BindGroupEntry e{};
         e.binding = binding;
         e.buffer = buf;
-        e.offset = 0;
-        e.size = bytes;
+        e.offset = offset;
+        e.size = size;
         return e;
     };
 
-    entries[0].binding = 0;
-    entries[0].buffer = uniformBuffer_;
-    entries[0].offset = 0;
-    entries[0].size = 16;
-    entries[1] = makeStorageBE(1, buffers.bufVel(), vec4Bytes);
-    entries[2] = makeStorageBE(2, buffers.bufF(), vec4Bytes);
-    entries[3] = makeStorageBE(3, buffers.bufPrevF(), vec4Bytes);
-    entries[4] = makeStorageBE(4, buffers.bufInvMass(), f32Bytes);
+    std::array<wgpu::BindGroupEntry, 5> entries{};
+    entries[0] = makeBE(0, sharedUniforms_, sizeof(Uniforms));
+    entries[1] = makeBE(1, buffers.bufVel(), vec4Bytes);
+    entries[2] = makeBE(2, buffers.bufF(), vec4Bytes);
+    entries[3] = makeBE(3, buffers.bufPrevF(), vec4Bytes);
+    entries[4] = makeBE(4, buffers.bufInvMass(), f32Bytes);
 
     wgpu::BindGroupDescriptor bgDesc{};
     bgDesc.label = wgpu::StringView("VerletCorrect_BindGroup");
     bgDesc.layout = bindGroupLayout_;
-    bgDesc.entryCount = static_cast<uint32_t>(entries.size());
+    bgDesc.entryCount = entries.size();
     bgDesc.entries = entries.data();
-
-    return WGPUContext::instance().device().createBindGroup(bgDesc);
+    bindGroup_ = WGPUContext::instance().device().createBindGroup(bgDesc);
 }
 
-void GpuVerletCorrect::record(wgpu::CommandEncoder& enc, const GpuAtomBuffers& buffers, uint32_t atomCount, float dt, float accelDamping) {
+void GpuVerletCorrect::record(wgpu::CommandEncoder& enc, uint32_t atomCount) {
     assert(isReady());
-    assert(atomCount <= buffers.countAtoms());
-
-    struct GpuUniforms {
-        float dt;
-        float accelDamping;
-        uint32_t atomCount;
-        uint32_t pad;
-    } uni{dt, accelDamping, atomCount, 0u};
-
-    WGPUContext::instance().queue().writeBuffer(uniformBuffer_, 0, &uni, sizeof(uni));
-
-    wgpu::BindGroup bindGroup = makeBindGroup(buffers);
+    assert(bindGroup_ != nullptr);
 
     wgpu::ComputePassDescriptor passDesc{};
     passDesc.label = wgpu::StringView("VerletCorrect pass");
     wgpu::ComputePassEncoder pass = enc.beginComputePass(passDesc);
 
     pass.setPipeline(pipeline_);
-    pass.setBindGroup(0, bindGroup, 0, nullptr);
 
-    const uint32_t groups = (atomCount + kWorkgroupSize - 1) / kWorkgroupSize;
-    pass.dispatchWorkgroups(groups, 1, 1);
+    uint32_t dynOffset = kUniformOffset;
+    pass.setBindGroup(0, bindGroup_, 1, &dynOffset);
+
+    pass.dispatchWorkgroups((atomCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
     pass.end();
 }

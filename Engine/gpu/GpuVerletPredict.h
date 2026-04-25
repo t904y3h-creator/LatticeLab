@@ -1,5 +1,5 @@
+// GpuVerletPredict.h
 #pragma once
-
 #include <cstdint>
 
 #include <webgpu/webgpu.hpp>
@@ -8,26 +8,36 @@ class GpuAtomBuffers;
 
 class GpuVerletPredict {
 public:
-    GpuVerletPredict();
+    struct Uniforms {
+        float dt;
+        uint32_t atomCount;
+        uint32_t pad[2];
+    };
+    static_assert(sizeof(Uniforms) == 16);
+    static constexpr uint32_t kUniformOffset = 0;
+
+    explicit GpuVerletPredict(wgpu::Buffer sharedUniforms) : sharedUniforms_(sharedUniforms) { buildPipeline(); }
 
     GpuVerletPredict(const GpuVerletPredict&) = delete;
     GpuVerletPredict& operator=(const GpuVerletPredict&) = delete;
 
     bool isReady() const { return pipeline_ != nullptr; }
 
-    void record(wgpu::CommandEncoder& enc, const GpuAtomBuffers& buffers, uint32_t atomCount, float dt);
+    // Вызвать один раз после создания GpuAtomBuffers
+    void prepare(const GpuAtomBuffers& buffers);
+
+    void record(wgpu::CommandEncoder& enc, uint32_t atomCount);
 
 private:
     void buildPipeline();
 
-    wgpu::BindGroup makeBindGroup(const GpuAtomBuffers& buffers) const;
+    wgpu::Buffer sharedUniforms_;
+    wgpu::BindGroup bindGroup_ = nullptr;
 
     wgpu::ShaderModule shaderModule_ = nullptr;
     wgpu::BindGroupLayout bindGroupLayout_ = nullptr;
     wgpu::PipelineLayout pipelineLayout_ = nullptr;
     wgpu::ComputePipeline pipeline_ = nullptr;
-    wgpu::Buffer uniformBuffer_ = nullptr;
 
-    // Количество потоков в одном workgroup (должно совпадать с шейдером).
     static constexpr uint32_t kWorkgroupSize = 64;
 };

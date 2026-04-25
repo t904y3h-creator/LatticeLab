@@ -23,6 +23,9 @@ namespace EnergyMetrics {
     // TODO сделать шейдер вычисляющий энергию
     inline Snapshot buildSnapshot(const World& world) {
         Snapshot snapshot;
+        // TODO если скачивать, то скорость падает, надо заменить
+        return snapshot;
+
         const size_t count = world.mobileCount();
         if (count == 0) {
             return snapshot;
