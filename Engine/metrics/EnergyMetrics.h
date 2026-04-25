@@ -1,7 +1,10 @@
 #pragma once
 
+#include <vector>
+
+#include "Engine/World.h"
+#include "Engine/math/Vec3.h"
 #include "Engine/physics/AtomData.h"
-#include "Engine/physics/AtomStorage.h"
 
 namespace EnergyMetrics {
     struct Snapshot {
@@ -9,57 +12,49 @@ namespace EnergyMetrics {
         float averagePotentialEnergyEv = 0.0f;
         float averageSpeedSim = 0.0f;
 
-        float fullAverageEnergyEv() const {
-            return averageKineticEnergyEv + averagePotentialEnergyEv;
-        }
-
-        float temperatureK() const {
-            return 2.0f * averageKineticEnergyEv / (3.0f * Units::kboltzmann);
-        }
-
-        float temperatureC() const {
-            return temperatureK() - 273.15f;
-        }
-
-        float averageSpeedKmPerHour() const {
-            return averageSpeedSim * Units::SpeedUnitToKmph;
-        }
+        float fullAverageEnergyEv() const { return averageKineticEnergyEv + averagePotentialEnergyEv; }
+        float temperatureK() const { return 2.0f * averageKineticEnergyEv / (3.0f * Units::kboltzmann); }
+        float temperatureC() const { return temperatureK() - 273.15f; }
+        float averageSpeedKmPerHour() const { return averageSpeedSim * Units::SpeedUnitToKmph; }
     };
 
-    inline float kineticEnergy(AtomData::Type type, const Vec3f& speed) { return 0.5f * AtomData::getProps(type).mass * speed.sqrAbs(); }
+    inline float kineticEnergy(AtomData::Type type, const Vec3f& vel) { return 0.5f * AtomData::getProps(type).mass * vel.sqrAbs(); }
 
-    inline Snapshot buildSnapshot(const AtomStorage& atomStorage) {
+    // TODO сделать шейдер вычисляющий энергию
+    inline Snapshot buildSnapshot(const World& world) {
         Snapshot snapshot;
-        if (atomStorage.empty()) {
+        const size_t count = world.mobileCount();
+        if (count == 0) {
             return snapshot;
         }
 
-        float totalKineticEnergy = 0.0f;
-        float totalPotentialEnergy = 0.0f;
-        float totalSpeed = 0.0f;
-        for (size_t atomIndex = 0; atomIndex < atomStorage.size(); ++atomIndex) {
-            totalKineticEnergy += kineticEnergy(atomStorage.type(atomIndex), atomStorage.vel(atomIndex));
-            totalPotentialEnergy += atomStorage.energy(atomIndex);
-            totalSpeed += atomStorage.vel(atomIndex).abs();
+        std::vector<Vec3f> velocities(count);
+        std::vector<float> pe(count);
+        std::vector<uint32_t> types(count);
+
+        // скачиваем только мобильные атомы (первые mobileCount)
+        world.getAtomBuffers().downloadVelocities(velocities);
+        world.getAtomBuffers().downloadPe(pe);
+        world.getAtomBuffers().downloadAtomType(types);
+
+        float totalKE = 0.f;
+        float totalPE = 0.f;
+        float totalSpeed = 0.f;
+
+        for (size_t i = 0; i < count; ++i) {
+            totalKE += kineticEnergy(static_cast<AtomData::Type>(types[i]), velocities[i]);
+            totalPE += pe[i];
+            totalSpeed += velocities[i].abs();
         }
 
-        const float invAtomCount = 1.0f / atomStorage.size();
-        snapshot.averageKineticEnergyEv = totalKineticEnergy * invAtomCount;
-        snapshot.averagePotentialEnergyEv = totalPotentialEnergy * invAtomCount;
-        snapshot.averageSpeedSim = totalSpeed * invAtomCount;
+        const float inv = 1.f / static_cast<float>(count);
+        snapshot.averageKineticEnergyEv = totalKE * inv;
+        snapshot.averagePotentialEnergyEv = totalPE * inv;
+        snapshot.averageSpeedSim = totalSpeed * inv;
         return snapshot;
     }
 
-    inline float averageKineticEnergy(const AtomStorage& atomStorage) {
-        return buildSnapshot(atomStorage).averageKineticEnergyEv;
-    }
-
-    inline float averagePotentialEnergy(const AtomStorage& atomStorage) {
-        return buildSnapshot(atomStorage).averagePotentialEnergyEv;
-    }
-
-    inline float fullAverageEnergy(const AtomStorage& atomStorage) {
-        return buildSnapshot(atomStorage).fullAverageEnergyEv();
-    }
-
-} // namespace EnergyMetrics
+    inline float averageKineticEnergy(const World& world) { return buildSnapshot(world).averageKineticEnergyEv; }
+    inline float averagePotentialEnergy(const World& world) { return buildSnapshot(world).averagePotentialEnergyEv; }
+    inline float fullAverageEnergy(const World& world) { return buildSnapshot(world).fullAverageEnergyEv(); }
+}
