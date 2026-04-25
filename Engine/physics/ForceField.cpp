@@ -4,7 +4,7 @@
 
 namespace {
     template <bool UseLJ, bool UseCoulomb>
-    void computePairInteractionsImpl(AtomStorage& atoms, NeighborList& neighborList, const LJForceField& ljForceField,
+    void computePairInteractionsImpl(AtomStorage& atoms, NeighborList& neighborList, const LJTable& ljForceField,
                                      const CoulombForceField& coulombForceField) {
         // const auto& offsets = neighborList.offsets();
         // const auto& neighbours = neighborList.neighbors();

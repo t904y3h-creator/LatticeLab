@@ -2,7 +2,7 @@
 
 #include "Engine/gpu/GpuAtomBuffers.h"
 #include "Engine/gpu/neigbors/GpuGridBuffers.h"
-#include "Engine/math/Vec3.h"
+#include "Engine/physics/ForceFields/LJTable.h"
 
 class World {
 public:
@@ -28,6 +28,8 @@ public:
     size_t mobileCount() const { return mobileCount_; }
     size_t staticCount() const { return atomCount() - mobileCount_; }
 
+    const LJTable& getLJForceField() const { return ljForceField_; }
+
     // Добавляет подвижные атомы (вставляет перед статичными).
     void addAtoms(std::span<const Vec3f> positions, std::span<const Vec3f> velocities, std::span<const uint32_t> types);
     // Добавляет статичные атомы (в конец).
@@ -48,6 +50,7 @@ private:
 
     Vec3f size;
     Vec3f gravity;
+    LJTable ljForceField_;
 
     size_t mobileCount_ = 0;
     GpuAtomBuffers atomBuffers;

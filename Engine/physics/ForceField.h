@@ -29,7 +29,7 @@ private:
     void computePairInteractions(AtomStorage& atoms, NeighborList& neighborList) const;
 
     Vec3f static_force_;
-    LJForceField ljForceField_;
+    LJTable ljForceField_;
     BondForceField bondForceField_;
     CoulombForceField coulombForceField_;
     bool enableLJ_ = true;

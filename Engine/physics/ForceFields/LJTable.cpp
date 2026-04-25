@@ -1,14 +1,10 @@
-#include "LJForceField.h"
+#include "LJTable.h"
 
 #include <cmath>
 
-#include "Engine/Consts.h"
-#include "Engine/metrics/Profiler.h"
+LJTable::LJTable() : ljPairTable_(buildLJPairTable()) {}
 
-LJForceField::LJForceField() : ljPairTable_(buildLJPairTable()) {}
-
-LJForceField::LJPairTable LJForceField::buildLJPairTable() {
-    /* построение таблицы LJ-параметров */
+LJTable::LJPairTable LJTable::buildLJPairTable() {
     LJPairTable table{};
     constexpr int typeCount = static_cast<int>(table.size());
 
@@ -39,6 +35,4 @@ LJForceField::LJPairTable LJForceField::buildLJPairTable() {
     return table;
 }
 
-const LJForceField::LJPairRow& LJForceField::pairRow(AtomData::Type type) const {
-    return ljPairTable_[static_cast<size_t>(type)];
-}
+const LJTable::LJPairRow& LJTable::pairRow(AtomData::Type type) const { return ljPairTable_[static_cast<size_t>(type)]; }

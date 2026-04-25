@@ -28,10 +28,6 @@ void GpuWallForceField::buildPipeline() {
     smDesc.nextInChain = &wgslDesc.chain;
     shaderModule_ = WGPUContext::instance().device().createShaderModule(smDesc);
 
-    // 0 — uniform  WallUniforms
-    // 1 — storage r   pos
-    // 2 — storage rw  force
-
     std::array<wgpu::BindGroupLayoutEntry, 3> bglEntries{};
 
     bglEntries[0].binding = 0;

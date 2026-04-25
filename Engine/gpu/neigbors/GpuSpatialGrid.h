@@ -16,7 +16,7 @@ public:
 
     bool isReady() const { return pipeline_count_ != nullptr; }
 
-    void record(wgpu::CommandEncoder enc, World& world);
+    void record(wgpu::CommandEncoder enc, const World& world);
 
 private:
     void buildPipelines();

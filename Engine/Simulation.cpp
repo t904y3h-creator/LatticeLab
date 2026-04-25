@@ -72,7 +72,6 @@ void Simulation::update() {
         .accelDamping = stepData.accelDamping,
         .maxParticleSpeed = 0,
         .enableLJ = true,
-        .allowNLRebuild = true,
     };
 
     gpuPipeline_.step(stepData.atomStorage, stepData.neighborList, stepData.box, stepParams);

@@ -136,7 +136,7 @@ void GpuSpatialGrid::runPass(wgpu::CommandEncoder enc, wgpu::ComputePipeline pip
     pass.end();
 }
 
-void GpuSpatialGrid::record(wgpu::CommandEncoder enc, World& world) {
+void GpuSpatialGrid::record(wgpu::CommandEncoder enc, const World& world) {
     assert(isReady());
 
     const Vec3u& gs = world.getGridSize();

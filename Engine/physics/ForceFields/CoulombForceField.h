@@ -9,8 +9,6 @@ class NeighborList;
 
 class CoulombForceField {
 public:
-    void compute(AtomStorage& atoms, NeighborList& neighborList) const;
-
     static constexpr float kCoulombEvAngstrom = 140.399645f; // eV*A/e^2
 
     inline void pairInteraction(AtomStorage& atoms, uint32_t bIndex, float dx, float dy, float dz, float d2, float chargeA, float& forceX,
