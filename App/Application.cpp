@@ -38,19 +38,23 @@ int Application::run() {
     WGPUContext::instance().init(window, width, height);
 
     // инициализация систем
-    World box(Vec3f(50, 50, 6));
-    Simulation simulation(box);
+    World world(Vec3f(50, 50, 6), 0);
+    Simulation simulation(world);
     CaptureController captureController;
-    std::unique_ptr<IRenderer> renderer = std::make_unique<Renderer2DWGPU>(
-        simulation.box(), WGPUContext::instance().device(), WGPUContext::instance().surfaceFormat(), simulation.gpuAtomBuffers());
+
+    std::unique_ptr<IRenderer> renderer = std::make_unique<Renderer2DWGPU>(WGPUContext::instance().surfaceFormat(), world);
+
     Interface appInterface(window, simulation, renderer, captureController);
     AppActions::Handler appActions(window, captureController, simulation, renderer, appInterface.state());
     CaptureActions::Handler captureActions(captureController);
+
     if (appInterface.init() != EXIT_SUCCESS) {
         return EXIT_FAILURE;
     }
+
     EventManager::init(window, renderer, appInterface);
     ToolsManager::init(window, simulation, renderer, appInterface);
+
     const DebugViews debugViews = createDebugViews(appInterface.debugPanel);
 
     // загрузка пользовательских настроек
@@ -62,19 +66,13 @@ int Application::run() {
     renderer->drawBonds = userSettings.rendererDrawBonds;
     renderer->speedColorMode = userSettings.rendererSpeedColorMode;
     renderer->speedGradientMax = userSettings.rendererSpeedGradientMax;
-    simulation.setIntegrator(userSettings.simulationIntegrator);
-    simulation.setBondFormationEnabled(userSettings.simulationBondFormationEnabled);
-    simulation.setLJEnabled(userSettings.simulationLJEnabled);
-    simulation.setCoulombEnabled(userSettings.simulationCoulombEnabled);
+    world.setLJEnabled(userSettings.simulationLJEnabled);
+    world.setCoulombEnabled(userSettings.simulationCoulombEnabled);
     appInterface.state().simulationSpeed = 100.0f;
     appInterface.state().pause = true;
 
     // создание сцены
-    Scenes::crystal(simulation, 50, AtomData::Type::Z, false);
-    // simulation.createAtom(Vec3f(24, 25, 3), Vec3f(1, 0, 0), AtomData::Type::Na);
-    // simulation.createAtom(Vec3f(28, 25, 3), Vec3f(-1, 0, 0), AtomData::Type::Na);
-
-    simulation.enableGpu(true);
+    Scenes::crystal(world, 50, AtomData::Type::Z, false);
 
     auto startTime = Clock::now();
     double renderAccum = 0.0;
@@ -85,6 +83,7 @@ int Application::run() {
     constexpr double logInterval = 1.0 / LPS;
 
     renderer->camera.resetView();
+
     while (!glfwWindowShouldClose(window)) {
         Profiler::instance().beginFrame();
 
@@ -107,7 +106,7 @@ int Application::run() {
         const double physicsInterval = 1.0 / uiState.simulationSpeed;
         if (physicsAccum >= physicsInterval) {
             if (!uiState.pause) {
-                simulation.update();
+                simulation.step();
             }
             physicsAccum = 0.0;
         }
@@ -123,33 +122,29 @@ int Application::run() {
 
             WGPUContext& ctx = WGPUContext::instance();
 
-            // получаем surface текстуру один раз на кадр
             wgpu::SurfaceTexture surfaceTex;
             ctx.surface().getCurrentTexture(&surfaceTex);
             wgpu::Texture surfaceTexture(surfaceTex.texture);
 
-            // - нет захвата → возвращает view от surface напрямую
-            // - идёт захват → возвращает view intermediate текстуры
             wgpu::TextureView renderTarget = captureController.acquireRenderTarget(surfaceTexture);
 
-            renderer->drawShot(renderTarget, ctx.depthView(), simulation.atoms(), simulation.bonds(), simulation.box(),
-                               simulation.gpuAtomBuffers());
+            wgpu::CommandEncoder enc = ctx.device().createCommandEncoder({});
+            renderer->drawShot(enc, renderTarget, ctx.depthView(), world);
             ToolsManager::pickingSystem->getOverlay().draw();
             ImGui::Render();
             auto* wgpuRenderer = static_cast<RendererWGPU*>(renderer.get());
             ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), wgpuRenderer->getCurrentPass());
-            renderer->endFrame();
+            // renderer->endFrame();
+            wgpu::CommandBuffer cmd = enc.finish({});
+            ctx.queue().submit(1, &cmd);
 
-            // захват кадра для видео
             captureController.onFrameRendered(surfaceTexture);
-
             ctx.present();
             ctx.processEvents();
         }
 
         Profiler::instance().endFrame();
 
-        // обновление логов и данных счетчиков
         if (logAccum >= logInterval) {
             logAccum -= logInterval;
             refreshSimulationDebugViews(debugViews, simulation);
@@ -165,10 +160,9 @@ int Application::run() {
         .rendererDrawBonds = renderer->drawBonds,
         .rendererSpeedColorMode = renderer->speedColorMode,
         .rendererSpeedGradientMax = renderer->speedGradientMax,
-        .simulationIntegrator = simulation.getIntegrator(),
-        .simulationBondFormationEnabled = simulation.isBondFormationEnabled(),
-        .simulationLJEnabled = simulation.isLJEnabled(),
-        .simulationCoulombEnabled = simulation.isCoulombEnabled(),
+        .simulationBondFormationEnabled = false,
+        .simulationLJEnabled = world.isLJEnabled(),
+        .simulationCoulombEnabled = world.isCoulombEnabled(),
     });
     appInterface.shutdown();
 

@@ -7,6 +7,11 @@ World::World(const Vec3f& worldsize, size_t countAtoms, float gridCellSize) : si
     resizeGrid();
 }
 
+void World::clear() {
+    clearAtoms();
+    resizeGrid();
+}
+
 void World::setWorldSize(const Vec3f& newSize) {
     size = newSize;
     resizeGrid();

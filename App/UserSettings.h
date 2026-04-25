@@ -17,7 +17,7 @@ struct UserSettings {
     IRenderer::SpeedColorMode rendererSpeedColorMode = IRenderer::SpeedColorMode::AtomColor;
     float rendererSpeedGradientMax = 5.0f;
 
-    Integrator::Scheme simulationIntegrator = Integrator::Scheme::Verlet;
+    // Integrator::Scheme simulationIntegrator = Integrator::Scheme::Verlet;
     bool simulationBondFormationEnabled = false;
     bool simulationLJEnabled = true;
     bool simulationCoulombEnabled = true;

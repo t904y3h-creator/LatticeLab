@@ -274,29 +274,64 @@ void AppStateIO::saveBinary(CaptureController& captureController, const PreviewF
     simState.dt = simulation.getDt();
     simState.time_ns = simulation.simTimeNs();
     simState.step = simulation.getSimStep();
-    simState.integrator = simulation.getIntegrator();
-    simState.gravity = simulation.getGravity();
-    simState.bondFormationEnabled = simulation.isBondFormationEnabled();
-    simState.LJEnabled = simulation.isLJEnabled();
-    simState.coulombEnabled = simulation.isCoulombEnabled();
-    simState.boxSize = simulation.box().size;
-    simState.gridCellSize = simulation.box().grid.cellSize;
-    simState.neighborListCutoff = simulation.getNeighborListCutoff();
-    simState.neighborListSkin = simulation.getNeighborListSkin();
+    // TODO дописать
+    // simState.integrator = simulation.getIntegrator();
+    simState.gravity = simulation.world().getGravity();
+    simState.bondFormationEnabled = false; // simulation.isBondFormationEnabled();
+    simState.LJEnabled = simulation.world().isLJEnabled();
+    simState.coulombEnabled = simulation.world().isCoulombEnabled();
+    simState.boxSize = simulation.world().getWorldSize();
+    simState.gridCellSize = simulation.world().getGridCellSize();
+    // simState.neighborListCutoff = simulation.getNeighborListCutoff();
+    // simState.neighborListSkin = simulation.getNeighborListSkin();
     simState.maxParticleSpeed = simulation.getMaxParticleSpeed();
     simState.accelDamping = simulation.getAccelDamping();
-    simState.atomMobileCount = simulation.atoms().mobileCount();
-    simState.x.assign(simulation.atoms().xDataSpan().begin(), simulation.atoms().xDataSpan().end());
-    simState.y.assign(simulation.atoms().yDataSpan().begin(), simulation.atoms().yDataSpan().end());
-    simState.z.assign(simulation.atoms().zDataSpan().begin(), simulation.atoms().zDataSpan().end());
-    simState.vx.assign(simulation.atoms().vxDataSpan().begin(), simulation.atoms().vxDataSpan().end());
-    simState.vy.assign(simulation.atoms().vyDataSpan().begin(), simulation.atoms().vyDataSpan().end());
-    simState.vz.assign(simulation.atoms().vzDataSpan().begin(), simulation.atoms().vzDataSpan().end());
-    simState.atomType.assign(simulation.atoms().atomTypeDataSpan().begin(), simulation.atoms().atomTypeDataSpan().end());
-    simState.atomCharge.assign(simulation.atoms().chargeDataSpan().begin(), simulation.atoms().chargeDataSpan().end());
+    simState.atomMobileCount = simulation.world().mobileCount();
 
-    auto view = simulation.bonds() | std::views::transform([](const Bond& b) { return std::pair{b.aIndex, b.bIndex}; });
-    simState.bonds.assign(view.begin(), view.end());
+    // TODO переписать
+    const size_t count = simulation.world().atomCount();
+
+    std::vector<Vec3f> positions(count), velocities(count);
+    std::vector<uint32_t> types(count);
+    std::vector<float> charges(count);
+
+    auto& atomBuffers = simulation.world().getAtomBuffers();
+    atomBuffers.downloadPositions(positions);
+    atomBuffers.downloadVelocities(velocities);
+    atomBuffers.downloadAtomType(types);
+    atomBuffers.downloadCharge(charges);
+
+    simState.x.resize(count);
+    simState.y.resize(count);
+    simState.z.resize(count);
+    simState.vx.resize(count);
+    simState.vy.resize(count);
+    simState.vz.resize(count);
+    simState.atomType.resize(count);
+    simState.atomCharge.resize(count);
+
+    for (size_t i = 0; i < count; ++i) {
+        simState.x[i] = positions[i].x;
+        simState.y[i] = positions[i].y;
+        simState.z[i] = positions[i].z;
+        simState.vx[i] = velocities[i].x;
+        simState.vy[i] = velocities[i].y;
+        simState.vz[i] = velocities[i].z;
+        simState.atomType[i] = static_cast<AtomData::Type>(types[i]);
+        simState.atomCharge[i] = charges[i];
+    }
+
+    // simState.x.assign(simulation.atoms().xDataSpan().begin(), simulation.atoms().xDataSpan().end());
+    // simState.y.assign(simulation.atoms().yDataSpan().begin(), simulation.atoms().yDataSpan().end());
+    // simState.z.assign(simulation.atoms().zDataSpan().begin(), simulation.atoms().zDataSpan().end());
+    // simState.vx.assign(simulation.atoms().vxDataSpan().begin(), simulation.atoms().vxDataSpan().end());
+    // simState.vy.assign(simulation.atoms().vyDataSpan().begin(), simulation.atoms().vyDataSpan().end());
+    // simState.vz.assign(simulation.atoms().vzDataSpan().begin(), simulation.atoms().vzDataSpan().end());
+    // simState.atomType.assign(simulation.atoms().atomTypeDataSpan().begin(), simulation.atoms().atomTypeDataSpan().end());
+    // simState.atomCharge.assign(simulation.atoms().chargeDataSpan().begin(), simulation.atoms().chargeDataSpan().end());
+
+    // auto view = simulation.bonds() | std::views::transform([](const Bond& b) { return std::pair{b.aIndex, b.bIndex}; });
+    // simState.bonds.assign(view.begin(), view.end());
 
     RendererSaveState rendState;
     rendState.drawGrid = renderer.drawGrid;
@@ -406,33 +441,36 @@ void AppStateIO::loadBinary(Simulation& simulation, IRenderer& renderer, std::st
     // Симуляция
     const auto& simState = appState.simulation;
 
-    simulation.clear();
+    simulation.world().clear();
 
-    simulation.setSizeBox(simState.boxSize, simState.gridCellSize);
-    simulation.setNeighborListCutoff(simState.neighborListCutoff);
-    simulation.setNeighborListSkin(simState.neighborListSkin);
+    simulation.world().setWorldSize(simState.boxSize);
+    simulation.world().setGridCellSize(simState.gridCellSize);
+    // TODO переписать
+    // simulation.setNeighborListCutoff(simState.neighborListCutoff);
+    // simulation.setNeighborListSkin(simState.neighborListSkin);
 
     simulation.setDt(simState.dt);
-    simulation.setIntegrator(simState.integrator);
-    simulation.setGravity(simState.gravity);
-    simulation.setBondFormationEnabled(simState.bondFormationEnabled);
-    simulation.setLJEnabled(simState.LJEnabled);
-    simulation.setCoulombEnabled(simState.coulombEnabled);
+    // simulation.setIntegrator(simState.integrator);
+    simulation.world().setGravity(simState.gravity);
+    // simulation.world().setBondFormationEnabled(simState.bondFormationEnabled);
+    simulation.world().setLJEnabled(simState.LJEnabled);
+    simulation.world().setCoulombEnabled(simState.coulombEnabled);
     simulation.setMaxParticleSpeed(simState.maxParticleSpeed);
     simulation.setAccelDamping(simState.accelDamping);
 
     const uint64_t atomMobileCount = simState.atomMobileCount;
     const uint64_t atomCount = simState.x.size();
 
-    AtomStorage& atoms = simulation.atoms();
-    simulation.reserveAtoms(atoms.size());
-    atoms.init(atomCount, atomMobileCount, simState.x, simState.y, simState.z, simState.vx, simState.vy, simState.vz, simState.atomType,
-               simState.atomCharge);
-    simulation.finalizeAtomBatch();
+    // TODO переписать
+    // AtomStorage& atoms = simulation.atoms();
+    // simulation.reserveAtoms(atoms.size());
+    // atoms.init(atomCount, atomMobileCount, simState.x, simState.y, simState.z, simState.vx, simState.vy, simState.vz, simState.atomType,
+    //            simState.atomCharge);
+    // simulation.finalizeAtomBatch();
 
-    for (const auto& [aIndex, bIndex] : simState.bonds) {
-        simulation.addBond(aIndex, bIndex);
-    }
+    // for (const auto& [aIndex, bIndex] : simState.bonds) {
+    //     simulation.addBond(aIndex, bIndex);
+    // }
     simulation.restoreRuntimeState(simState.step, simState.time_ns);
 
     // Рендер

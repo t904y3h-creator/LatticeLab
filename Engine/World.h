@@ -12,6 +12,8 @@ public:
     World(const World&) = delete;
     World& operator=(const World&) = delete;
 
+    void clear();
+
     void setWorldSize(const Vec3f& newSize);
     const Vec3f& getWorldSize() const noexcept { return size; }
 

@@ -15,7 +15,7 @@ struct SimulationSaveState {
     float dt;
     float time_ns;
     uint64_t step;
-    Integrator::Scheme integrator;
+    // Integrator::Scheme integrator;
 
     // Силы
     Vec3f gravity;
@@ -51,10 +51,11 @@ struct SimulationSaveState {
         }
 
         // v1
-        if (auto err = archive(self.dt, self.time_ns, self.step, self.integrator, self.gravity, self.bondFormationEnabled, self.LJEnabled,
-                               self.coulombEnabled, self.boxSize, self.gridCellSize, self.neighborListCutoff, self.neighborListSkin,
-                               self.maxParticleSpeed, self.accelDamping, self.atomMobileCount, self.x, self.y, self.z, self.vx, self.vy,
-                               self.vz, self.atomType, self.atomCharge, self.bonds);
+        // TODO переписать
+        if (auto err = archive(self.dt, self.time_ns, self.step, /*self.integrator,*/ self.gravity, self.bondFormationEnabled,
+                               self.LJEnabled, self.coulombEnabled, self.boxSize, self.gridCellSize, self.neighborListCutoff,
+                               self.neighborListSkin, self.maxParticleSpeed, self.accelDamping, self.atomMobileCount, self.x, self.y,
+                               self.z, self.vx, self.vy, self.vz, self.atomType, self.atomCharge, self.bonds);
             zpp::bits::failure(err.code)) {
             return err;
         }
