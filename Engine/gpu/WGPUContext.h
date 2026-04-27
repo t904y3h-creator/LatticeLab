@@ -103,6 +103,14 @@ public:
         }
 
         wgpu::InstanceDescriptor instanceDesc{};
+
+#ifndef NDEBUG
+        WGPUInstanceExtras extras{};
+        extras.chain.sType = (WGPUSType)WGPUNativeSType::WGPUSType_InstanceExtras;
+        extras.flags = WGPUInstanceFlag_Debug;
+        instanceDesc.nextInChain = &extras.chain;
+#endif
+
         instance_ = wgpu::createInstance(instanceDesc);
         if (!instance_) {
             throw std::runtime_error("wgpu: failed to create instance");

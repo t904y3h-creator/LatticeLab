@@ -5,12 +5,12 @@
 
 #include <benchmark/benchmark.h>
 
+#include "App/Scenes.h"
 #include "App/interaction/ToolsManager.h"
 #include "App/interaction/picking/PickingSystem.h"
-#include "Engine/SimBox.h"
+#include "Engine/World.h"
 #include "Engine/gpu/WGPUContext.h"
 #include "Engine/physics/AtomData.h"
-#include "Engine/physics/AtomStorage.h"
 #include "Engine/physics/Bond.h"
 #include "Rendering/BaseRenderer.h"
 
@@ -34,11 +34,11 @@ public:
         colorTexture_ = ctx.device().createTexture(colorDesc);
         colorTextureView_ = colorTexture_.createView();
 
-        atomStorage_ = makeGridAtoms(static_cast<int>(state.range(0)));
-        renderer_ = std::make_unique<TRenderer>(box_, ctx.device(), ctx.surfaceFormat());
+        makeGridAtoms(world, static_cast<int>(state.range(0)));
+        renderer_ = std::make_unique<TRenderer>(world, ctx.device(), ctx.surfaceFormat());
         renderer_->camera.setScreenSize({800.0f, 600.0f});
 
-        ToolsManager::pickingSystem = new PickingSystem(atomStorage_, box_, renderer_);
+        ToolsManager::pickingSystem = new PickingSystem(world, renderer_);
     }
 
     void TearDown(benchmark::State&) override {
@@ -51,26 +51,16 @@ public:
 
 protected:
     void setCounters(benchmark::State& state) const {
-        state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(atomStorage_.size()));
+        state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(world.atomCount()));
     }
 
     wgpu::Texture colorTexture_;
     wgpu::TextureView colorTextureView_;
 
     std::unique_ptr<IRenderer> renderer_;
-    AtomStorage atomStorage_;
+    World world;
     Bond::List bonds_;
-    World box_{Vec3f(300, 300, 300)};
 
 private:
-    static AtomStorage makeGridAtoms(int count) {
-        AtomStorage atoms;
-        atoms.reserve(count);
-        const int side = static_cast<int>(std::cbrt(count)) + 1;
-        for (int i = 0; i < count; ++i) {
-            atoms.addAtom(Vec3f((i % side) * 3.0f, ((i / side) % side) * 3.0f, (i / static_cast<float>(side * side)) * 3.0f),
-                          Vec3f::Random() * 0.5f, AtomData::Type::H);
-        }
-        return atoms;
-    }
+    static void makeGridAtoms(World& world, int count) { Scenes::crystal(world, count, AtomData::Type::Z, false); }
 };

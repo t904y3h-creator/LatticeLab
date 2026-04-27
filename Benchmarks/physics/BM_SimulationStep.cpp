@@ -1,4 +1,5 @@
 #include <benchmark/benchmark.h>
+#include <webgpu/webgpu.hpp>
 
 #include "Benchmarks/fixtures/SimulationFixture.h"
 
@@ -8,28 +9,46 @@ BENCHMARK_DEFINE_F(SimulationFixture, FullStepWithNeighborList)(benchmark::State
 
     rebuildScene();
     simulation_->setDt(Benchmarks::kDt);
-    for (int i = 0; i < kWarmupSteps; ++i) {
-        simulation_->update();
-    }
-    const size_t rebuildCountBefore = simulation_->neighborList().stats().rebuildCount();
+
+    // for (int i = 0; i < kWarmupSteps; ++i) {
+    //     simulation_->step(physEnc);
+    // }
+
+    // const size_t rebuildCountBefore = simulation_->neighborList().stats().rebuildCount();
+
+    WGPUContext& ctx = WGPUContext::instance();
+
+    wgpu::CommandEncoderDescriptor desc;
+    desc.label = wgpu::StringView("PhysicsEncoder");
+    wgpu::CommandEncoder physEnc = ctx.device().createCommandEncoder(desc);
 
     for (auto _ : state) {
-        simulation_->update();
-        benchmark::ClobberMemory();
+        wgpu::CommandEncoderDescriptor desc;
+        wgpu::CommandEncoder physEnc = ctx.device().createCommandEncoder(desc);
+
+        for (int i = 0; i < 10'000; ++i) {
+            simulation_->step(physEnc);
+        }
+
+        wgpu::CommandBuffer cmd = physEnc.finish();
+
+        ctx.queue().submit(1, &cmd);
+
+        ctx.device().poll(true, nullptr);
     }
 
-    const size_t rebuildCountAfter = simulation_->neighborList().stats().rebuildCount();
-    const size_t rebuildCount = rebuildCountAfter - rebuildCountBefore;
-    const double iterCount = static_cast<double>(state.iterations());
+    // const size_t rebuildCountAfter = simulation_->neighborList().stats().rebuildCount();
+    // const size_t rebuildCount = rebuildCountAfter - rebuildCountBefore;
+    // const double iterCount = static_cast<double>(state.iterations());
 
-    state.counters["nl_rebuild_count"] = static_cast<double>(rebuildCount);
-    state.counters["nl_rebuilds_per_step"] = (iterCount > 0.0) ? static_cast<double>(rebuildCount) / iterCount : 0.0;
-    state.counters["nl_avg_steps_between_rebuilds"] =
-        static_cast<double>(simulation_->neighborList().stats().averageStepsBetweenRebuilds());
-    state.counters["nl_steps_since_last_rebuild"] =
-        static_cast<double>(simulation_->neighborList().stats().stepsSinceLastRebuild(simulation_->getSimStep()));
+    // state.counters["nl_rebuild_count"] = static_cast<double>(rebuildCount);
+    // state.counters["nl_rebuilds_per_step"] = (iterCount > 0.0) ? static_cast<double>(rebuildCount) / iterCount : 0.0;
+    // state.counters["nl_avg_steps_between_rebuilds"] =
+    //     static_cast<double>(simulation_->neighborList().stats().averageStepsBetweenRebuilds());
+    // state.counters["nl_steps_since_last_rebuild"] =
+    //     static_cast<double>(simulation_->neighborList().stats().stepsSinceLastRebuild(simulation_->getSimStep()));
 
-    setCounters(state);
+    // setCounters(state);
 }
 
 BENCHMARK_REGISTER_F(SimulationFixture, FullStepWithNeighborList)->RangeMultiplier(8)->Range(Benchmarks::kAtomMin, Benchmarks::kAtomMax);

@@ -9,8 +9,9 @@
 #include "Benchmarks/BenchmarkCase.h"
 #include "Benchmarks/BenchmarkScenes.h"
 #include "Engine/Simulation.h"
-#include "Engine/physics/integrators/StepOps.h"
-#include "Engine/physics/integrators/VerletScheme.h"
+#include "Engine/gpu/WGPUContext.h"
+// #include "Engine/physics/integrators/StepOps.h"
+// #include "Engine/physics/integrators/VerletScheme.h"
 
 namespace Benchmarks {
     constexpr double kDt = 0.01;
@@ -34,10 +35,10 @@ namespace Benchmarks {
 
     inline BenchmarkCase makeCaseForSelectedScene(int atomCount) {
         BenchmarkCase benchmarkCase{.scene = sceneFromEnv(),
-                                    .integrator = Integrator::Scheme::Verlet,
+                                    // .integrator = Integrator::Scheme::Verlet,
                                     .atomCount = atomCount,
                                     .boxSize = Vec3f(160.0, 160.0, 160.0),
-                                    .cellSize = 5};
+                                    .cellSize = 6};
 
         if (benchmarkCase.scene == SceneKind::Crystal2D || benchmarkCase.scene == SceneKind::RandomGas2D) {
             benchmarkCase.boxSize = Vec3f(160.0, 160.0, 6.0);
@@ -49,51 +50,53 @@ namespace Benchmarks {
 class SimulationFixture : public benchmark::Fixture {
 public:
     void SetUp(benchmark::State& state) override {
+        WGPUContext::instance().initHeadless(600, 800);
         atomCount_ = static_cast<int>(state.range(0));
-        box_ = std::make_unique<World>(Vec3f(160, 160, 160));
-        simulation_ = std::make_unique<Simulation>(*box_);
+        world_ = std::make_unique<World>(Vec3f(160, 160, 160), atomCount_);
+        simulation_ = std::make_unique<Simulation>(*world_);
     }
 
     void TearDown(benchmark::State&) override { simulation_.reset(); }
 
 protected:
-    StepData makeStepData(float accelDamping = 0.9f) {
-        return StepData{
-            .atomStorage = simulation_->atoms(),
-            .bonds = simulation_->bonds(),
-            .box = simulation_->box(),
-            .forceField = simulation_->forceField(),
-            .neighborList = simulation_->neighborList(),
-            .allowBondFormation = simulation_->isBondFormationEnabled(),
-            .accelDamping = accelDamping,
-            .dt = static_cast<float>(Benchmarks::kDt),
-        };
-    }
+    // StepData makeStepData(float accelDamping = 0.9f) {
+    //     return StepData{
+    //         .atomStorage = simulation_->atoms(),
+    //         .bonds = simulation_->bonds(),
+    //         .box = simulation_->box(),
+    //         .forceField = simulation_->forceField(),
+    //         .neighborList = simulation_->neighborList(),
+    //         .allowBondFormation = simulation_->isBondFormationEnabled(),
+    //         .accelDamping = accelDamping,
+    //         .dt = static_cast<float>(Benchmarks::kDt),
+    //     };
+    // }
 
     void rebuildScene() { Benchmarks::BenchmarkScenes::build(*simulation_, Benchmarks::makeCaseForSelectedScene(atomCount_)); }
 
-    void prepareForPredict() {
-        rebuildScene();
-        prepareNeighborList();
-        StepData stepData = makeStepData();
-        StepOps::computeForces(stepData);
-    }
+    // void prepareForPredict() {
+    // rebuildScene();
+    // prepareNeighborList();
+    // StepData stepData = makeStepData();
+    // StepOps::computeForces(stepData);
+    // }
 
-    void prepareNeighborList() { simulation_->neighborList().build(simulation_->atoms(), simulation_->box()); }
+    // void prepareNeighborList() { simulation_->neighborList().build(simulation_->atoms(), simulation_->box()); }
 
-    void prepareForCorrect() {
-        prepareForPredict();
-        StepData stepData = makeStepData();
-        StepOps::predictAndSync(stepData, &VerletScheme::predict);
-        StepOps::computeForces(stepData);
-    }
+    // void prepareForCorrect() {
+    //     prepareForPredict();
+    //     StepData stepData = makeStepData();
+    //     StepOps::predictAndSync(stepData, &VerletScheme::predict);
+    //     StepOps::computeForces(stepData);
+    // }
 
     void setCounters(benchmark::State& state) const {
-        const int64_t processedAtoms = simulation_ ? static_cast<int64_t>(simulation_->atoms().size()) : static_cast<int64_t>(atomCount_);
+        const int64_t processedAtoms =
+            simulation_ ? static_cast<int64_t>(simulation_->world().atomCount()) : static_cast<int64_t>(atomCount_);
         state.SetItemsProcessed(state.iterations() * processedAtoms);
     }
 
-    std::unique_ptr<World> box_;
+    std::unique_ptr<World> world_;
     std::unique_ptr<Simulation> simulation_;
     int atomCount_ = 0;
 };

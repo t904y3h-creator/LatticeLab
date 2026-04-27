@@ -12,7 +12,7 @@ namespace Benchmarks {
 
     struct BenchmarkCase {
         SceneKind scene = SceneKind::Crystal2D;
-        Integrator::Scheme integrator = Integrator::Scheme::Verlet;
+        // Integrator::Scheme integrator = Integrator::Scheme::Verlet;
 
         int atomCount = 1000;
         Vec3f boxSize = Vec3f(100.0, 100.0, 6.0);

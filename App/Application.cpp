@@ -39,7 +39,7 @@ int Application::run() {
 
     // инициализация систем
     World world(Vec3f(50, 50, 6), 0);
-    Scenes::crystal(world, 100, AtomData::Type::Z, false);
+    Scenes::crystal(world, 400, AtomData::Type::Z, false);
 
     Simulation simulation(world);
     CaptureController captureController;
@@ -109,7 +109,7 @@ int Application::run() {
         // Физика
         const double physicsInterval = 1.0 / uiState.simulationSpeed;
         if (physicsAccum >= physicsInterval) {
-            physicsAccum -= physicsInterval;
+            physicsAccum = 0.f;
 
             if (!uiState.pause) {
                 wgpu::CommandEncoderDescriptor desc;
@@ -154,6 +154,7 @@ int Application::run() {
 
             captureController.onFrameRendered(surfaceTexture);
             ctx.present();
+            ctx.processEvents();
         }
 
         // физика без рендера в этом кадре
