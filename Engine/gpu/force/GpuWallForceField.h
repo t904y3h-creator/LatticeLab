@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-#include <webgpu/webgpu.hpp>
+#include <webgpu/webgpu-raii.hpp>
 
 class GpuAtomBuffers;
 
@@ -21,7 +21,7 @@ public:
     GpuWallForceField(const GpuWallForceField&) = delete;
     GpuWallForceField& operator=(const GpuWallForceField&) = delete;
 
-    bool isReady() const { return pipeline_ != nullptr; }
+    bool isReady() const { return *pipeline_ != nullptr; }
 
     void prepare(const GpuAtomBuffers& atomBufs);
     void record(wgpu::CommandEncoder enc, uint32_t atomCount);
@@ -30,12 +30,12 @@ private:
     void buildPipeline();
 
     wgpu::Buffer sharedUniforms_;
-    wgpu::BindGroup bindGroup_ = nullptr;
+    wgpu::raii::BindGroup bindGroup_;
 
-    wgpu::ShaderModule shaderModule_ = nullptr;
-    wgpu::BindGroupLayout bindGroupLayout_ = nullptr;
-    wgpu::PipelineLayout pipelineLayout_ = nullptr;
-    wgpu::ComputePipeline pipeline_ = nullptr;
+    wgpu::raii::ShaderModule shaderModule_;
+    wgpu::raii::BindGroupLayout bindGroupLayout_;
+    wgpu::raii::PipelineLayout pipelineLayout_;
+    wgpu::raii::ComputePipeline pipeline_;
 
     static constexpr uint32_t kWorkgroupSize = 64;
 };

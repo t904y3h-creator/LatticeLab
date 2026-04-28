@@ -1,6 +1,6 @@
 #pragma once
 
-#include <webgpu/webgpu.hpp>
+#include <webgpu/webgpu-raii.hpp>
 
 #include "Engine/gpu/GpuStepOps.h"
 #include "Engine/gpu/GpuVerletCorrect.h"

@@ -3,7 +3,9 @@
 #include <vector>
 
 #include <glm/glm.hpp>
+#include <webgpu/webgpu-raii.hpp>
 
+#include "Engine/math/Vec3.h"
 #include "Rendering/BaseRenderer.h"
 
 class RendererWGPU : public IRenderer {
@@ -13,7 +15,7 @@ public:
 
     void drawShot(wgpu::CommandEncoder encoder, wgpu::TextureView targetView, wgpu::TextureView depthView, const World& world) override;
 
-    wgpu::RenderPassEncoder getCurrentPass() { return currentPass; }
+    wgpu::raii::RenderPassEncoder& getCurrentPass() { return currentPass; }
 
 protected:
     virtual void updateMatrices() = 0;
@@ -30,53 +32,52 @@ protected:
 
 private:
     struct SceneUniforms {
-        glm::mat4 view;
-        glm::mat4 projection;
-        glm::vec4 lightDir;
-        glm::vec4 colorMode;   // x = SpeedColorMode
-        glm::vec4 maxSpeedSqr; // x = value
-        glm::vec4 maxCount;    // x = value
-        glm::vec4 typeColors[119];
+        alignas(16) glm::mat4 view;
+        alignas(16) glm::mat4 projection;
+        alignas(16) glm::vec4 lightDir;
+        uint32_t colorMode;
+        float maxSpeedSqr;
+        uint32_t maxCount;
+        float _pad;
+        alignas(16) glm::vec4 typeColors[119];
     };
-    wgpu::Buffer uniformBuffer = nullptr;
+    wgpu::raii::Buffer uniformBuffer;
 
     struct GridUniforms {
+        alignas(16) Vec3u gridSize;
         float cellSize;
-        uint32_t dx;
-        uint32_t dy;
-        uint32_t dz;
     };
-    wgpu::Buffer gridUniformBuffer = nullptr;
+    wgpu::raii::Buffer gridUniformBuffer;
 
     // Vertex buffers
-    wgpu::Buffer atomQuadVb = nullptr;
-    wgpu::Buffer bondVb = nullptr;
-    wgpu::Buffer boxVb = nullptr;
-    wgpu::Buffer gridLineVb = nullptr;
+    wgpu::raii::Buffer atomQuadVb;
+    wgpu::raii::Buffer bondVb;
+    wgpu::raii::Buffer boxVb;
+    wgpu::raii::Buffer gridLineVb;
 
     // Pipelines
-    wgpu::RenderPipeline atomPipeline = nullptr;
-    wgpu::RenderPipeline bondPipeline = nullptr;
-    wgpu::RenderPipeline boxPipeline = nullptr;
-    wgpu::RenderPipeline gridPipeline = nullptr;
+    wgpu::raii::RenderPipeline atomPipeline;
+    wgpu::raii::RenderPipeline bondPipeline;
+    wgpu::raii::RenderPipeline boxPipeline;
+    wgpu::raii::RenderPipeline gridPipeline;
 
     // Bind group layouts
-    wgpu::BindGroupLayout atomBindGroupLayout = nullptr;
-    wgpu::BindGroupLayout lineBindGroupLayout = nullptr;
-    wgpu::BindGroupLayout gridBindGroupLayout = nullptr;
+    wgpu::raii::BindGroupLayout atomBindGroupLayout;
+    wgpu::raii::BindGroupLayout lineBindGroupLayout;
+    wgpu::raii::BindGroupLayout gridBindGroupLayout;
 
     // Storage buffers
     // TODO заменить на array<bool>
-    wgpu::Buffer sbRadius = nullptr;
-    wgpu::Buffer sbSel = nullptr; // array<f32>
+    wgpu::raii::Buffer sbRadius;
+    wgpu::raii::Buffer sbSel; // array<f32>
 
     size_t sbCapacity_ = 0;
     size_t bondVbCapacity_ = 0;
 
-    wgpu::BindGroup atomBindGroup = nullptr;
+    wgpu::raii::BindGroup atomBindGroup;
 
     // Текущий render pass (живёт в течение drawShot)
-    wgpu::RenderPassEncoder currentPass = nullptr;
+    wgpu::raii::RenderPassEncoder currentPass;
 
     wgpu::TextureFormat surfaceFormat;
 
@@ -99,7 +100,7 @@ private:
 
     // Data
     std::vector<glm::vec4> typeColorsData;
-    std::vector<float> selectedData_;
+    std::vector<std::uint32_t> selectedData_;
     std::vector<float> radii;
     std::vector<float> typeData;
 };

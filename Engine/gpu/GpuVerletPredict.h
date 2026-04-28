@@ -2,7 +2,7 @@
 #pragma once
 #include <cstdint>
 
-#include <webgpu/webgpu.hpp>
+#include <webgpu/webgpu-raii.hpp>
 
 class GpuAtomBuffers;
 
@@ -21,7 +21,7 @@ public:
     GpuVerletPredict(const GpuVerletPredict&) = delete;
     GpuVerletPredict& operator=(const GpuVerletPredict&) = delete;
 
-    bool isReady() const { return pipeline_ != nullptr; }
+    bool isReady() const { return *pipeline_ != nullptr; }
 
     // Вызвать один раз после создания GpuAtomBuffers
     void prepare(const GpuAtomBuffers& buffers);
@@ -32,12 +32,12 @@ private:
     void buildPipeline();
 
     wgpu::Buffer sharedUniforms_;
-    wgpu::BindGroup bindGroup_ = nullptr;
+    wgpu::raii::BindGroup bindGroup_;
 
-    wgpu::ShaderModule shaderModule_ = nullptr;
-    wgpu::BindGroupLayout bindGroupLayout_ = nullptr;
-    wgpu::PipelineLayout pipelineLayout_ = nullptr;
-    wgpu::ComputePipeline pipeline_ = nullptr;
+    wgpu::raii::ShaderModule shaderModule_;
+    wgpu::raii::BindGroupLayout bindGroupLayout_;
+    wgpu::raii::PipelineLayout pipelineLayout_;
+    wgpu::raii::ComputePipeline pipeline_;
 
     static constexpr uint32_t kWorkgroupSize = 64;
 };

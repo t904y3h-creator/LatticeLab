@@ -2,8 +2,6 @@
 
 #include <cstring>
 
-#include <webgpu/webgpu.hpp>
-
 #include "App/interaction/ToolsManager.h"
 #include "Engine/World.h"
 #include "Engine/gpu/GpuAtomBuffers.h"
@@ -56,7 +54,7 @@ void RendererWGPU::initAtomQuadBuffer() {
     };
     atomQuadVb =
         WGPUContext::instance().createBuffer(sizeof(quad), wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst, "AtomQuadGeometry");
-    WGPUContext::instance().queue().writeBuffer(atomQuadVb, 0, quad, sizeof(quad));
+    WGPUContext::instance().queue().writeBuffer(*atomQuadVb, 0, quad, sizeof(quad));
 }
 
 void RendererWGPU::initBoxBuffer() {
@@ -65,8 +63,8 @@ void RendererWGPU::initBoxBuffer() {
 }
 
 void RendererWGPU::initBondBuffer() {
-    bondVb = WGPUContext::instance().createBuffer(128, wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst, "BondGeometry");
-    bondVbCapacity_ = 128;
+    // bondVb = WGPUContext::instance().createBuffer(128, wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst, "BondGeometry");
+    // bondVbCapacity_ = 128;
 }
 
 void RendererWGPU::initGridLineBuffer() {
@@ -76,11 +74,11 @@ void RendererWGPU::initGridLineBuffer() {
     };
     gridLineVb =
         WGPUContext::instance().createBuffer(sizeof(lines), wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst, "GridCellUnitLines");
-    WGPUContext::instance().queue().writeBuffer(gridLineVb, 0, lines, sizeof(lines));
+    WGPUContext::instance().queue().writeBuffer(*gridLineVb, 0, lines, sizeof(lines));
 }
 
 void RendererWGPU::initAtomPipeline(std::string_view atomWGSL) {
-    wgpu::ShaderModule shader = createShaderModule(atomWGSL, "AtomShader");
+    wgpu::raii::ShaderModule shader = createShaderModule(atomWGSL, "AtomShader");
 
     std::array<wgpu::BindGroupLayoutEntry, 6> entries;
     entries[0].binding = 0;
@@ -128,7 +126,7 @@ void RendererWGPU::initAtomPipeline(std::string_view atomWGSL) {
     colorTarget.blend = &blend;
 
     wgpu::FragmentState fragState;
-    fragState.module = shader;
+    fragState.module = *shader;
     fragState.entryPoint = wgpu::StringView("fs_main");
     fragState.targetCount = 1;
     fragState.targets = &colorTarget;
@@ -141,7 +139,7 @@ void RendererWGPU::initAtomPipeline(std::string_view atomWGSL) {
     wgpu::RenderPipelineDescriptor pDesc{};
     pDesc.label = wgpu::StringView("AtomPipeline");
     pDesc.layout = pipelineLayout;
-    pDesc.vertex.module = shader;
+    pDesc.vertex.module = *shader;
     pDesc.vertex.entryPoint = wgpu::StringView("vs_main");
     pDesc.vertex.bufferCount = 1;
     pDesc.vertex.buffers = &quadLayout;
@@ -167,12 +165,12 @@ void RendererWGPU::initLinePipeline(wgpu::RenderPipeline& outPipeline, std::stri
     bglDesc.label = wgpu::StringView("LineBindGroupLayout");
     bglDesc.entryCount = 1;
     bglDesc.entries = &uboEntry;
-    auto bgl = WGPUContext::instance().device().createBindGroupLayout(bglDesc);
+    lineBindGroupLayout = WGPUContext::instance().device().createBindGroupLayout(bglDesc);
 
     wgpu::PipelineLayoutDescriptor plDesc{};
     plDesc.label = wgpu::StringView("LinePipelineLayout");
     plDesc.bindGroupLayoutCount = 1;
-    plDesc.bindGroupLayouts = (WGPUBindGroupLayout*)&bgl;
+    plDesc.bindGroupLayouts = (WGPUBindGroupLayout*)&(*lineBindGroupLayout);
 
     wgpu::VertexAttribute attr{};
     attr.format = wgpu::VertexFormat::Float32x3;
@@ -215,8 +213,6 @@ void RendererWGPU::initLinePipeline(wgpu::RenderPipeline& outPipeline, std::stri
     pDesc.depthStencil = &depthState;
 
     outPipeline = WGPUContext::instance().device().createRenderPipeline(pDesc);
-
-    lineBindGroupLayout = bgl;
 }
 
 void RendererWGPU::initGridPipeline(std::string_view gridWGSL) {
@@ -245,7 +241,7 @@ void RendererWGPU::initGridPipeline(std::string_view gridWGSL) {
     bglDesc.entries = bglEntries.data();
     gridBindGroupLayout = WGPUContext::instance().device().createBindGroupLayout(bglDesc);
 
-    WGPUBindGroupLayout rawBGL = gridBindGroupLayout;
+    WGPUBindGroupLayout rawBGL = *gridBindGroupLayout;
     wgpu::PipelineLayoutDescriptor plDesc{};
     plDesc.label = wgpu::StringView("GridPipelineLayout");
     plDesc.bindGroupLayoutCount = 1;
@@ -304,8 +300,8 @@ void RendererWGPU::initGridPipeline(std::string_view gridWGSL) {
         WGPUContext::instance().createBuffer(sizeof(GridUniforms), wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst, "GridUniforms");
 }
 
-void RendererWGPU::initBoxPipeline(std::string_view boxWGSL) { initLinePipeline(boxPipeline, boxWGSL); }
-void RendererWGPU::initBondPipeline(std::string_view bondWGSL) { initLinePipeline(bondPipeline, bondWGSL); }
+void RendererWGPU::initBoxPipeline(std::string_view boxWGSL) { initLinePipeline(*boxPipeline, boxWGSL); }
+void RendererWGPU::initBondPipeline(std::string_view bondWGSL) { initLinePipeline(*bondPipeline, bondWGSL); }
 
 void RendererWGPU::rebuildBindGroup(const World& world) {
     const GpuAtomBuffers& atoms = world.getAtomBuffers();
@@ -314,6 +310,7 @@ void RendererWGPU::rebuildBindGroup(const World& world) {
     const uint64_t vec4Bytes = count * 4 * sizeof(float);
     const uint64_t f32Bytes = count * sizeof(float);
     const uint64_t u32Bytes = count * sizeof(uint32_t);
+    const uint64_t boolBytes = count * sizeof(bool);
     const auto usage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst;
 
     sbRadius = WGPUContext::instance().createBuffer(f32Bytes, usage, "AtomsRadius");
@@ -325,16 +322,16 @@ void RendererWGPU::rebuildBindGroup(const World& world) {
         e.buffer = buf;
         e.size = size;
     };
-    setStorageEntry(entries[0], 0, uniformBuffer, sizeof(SceneUniforms));
+    setStorageEntry(entries[0], 0, *uniformBuffer, sizeof(SceneUniforms));
     setStorageEntry(entries[1], 1, atoms.bufPos(), vec4Bytes);
     setStorageEntry(entries[2], 2, atoms.bufVel(), vec4Bytes);
     setStorageEntry(entries[3], 3, atoms.bufAtomType(), u32Bytes);
-    setStorageEntry(entries[4], 4, sbRadius, f32Bytes);
-    setStorageEntry(entries[5], 5, sbSel, u32Bytes);
+    setStorageEntry(entries[4], 4, *sbRadius, f32Bytes);
+    setStorageEntry(entries[5], 5, *sbSel, boolBytes);
 
     wgpu::BindGroupDescriptor bgDesc{};
     bgDesc.label = wgpu::StringView("AtomBindGroup");
-    bgDesc.layout = atomBindGroupLayout;
+    bgDesc.layout = *atomBindGroupLayout;
     bgDesc.entryCount = entries.size();
     bgDesc.entries = entries.data();
     atomBindGroup = WGPUContext::instance().device().createBindGroup(bgDesc);
@@ -347,14 +344,19 @@ void RendererWGPU::drawShot(wgpu::CommandEncoder encoder, wgpu::TextureView targ
     uniforms.view = view;
     uniforms.projection = projection;
     uniforms.lightDir = glm::vec4(getLightDir(), 0.f);
-    uniforms.colorMode = glm::vec4(static_cast<float>(speedColorMode), 0, 0, 0);
-    uniforms.maxSpeedSqr = glm::vec4(1.f, 0, 0, 0);
-    uniforms.maxCount = glm::vec4(1.f, 0, 0, 0);
+    uniforms.colorMode = static_cast<uint32_t>(speedColorMode);
+    // maxSpeedSqr для color mode
+    float maxSpeedSqr = 1.f;
+    if (speedColorMode != SpeedColorMode::AtomColor) {
+        maxSpeedSqr = speedGradientMax > 0.f ? speedGradientMax * speedGradientMax : 1e-6f; // TODO подправить
+    }
+    uniforms.maxSpeedSqr = maxSpeedSqr;
+    uniforms.maxCount = 1.f;
     for (size_t i = 0; i < typeColorsData.size(); ++i) {
         uniforms.typeColors[i] = typeColorsData[i];
     }
 
-    WGPUContext::instance().device().getQueue().writeBuffer(uniformBuffer, 0, &uniforms, sizeof(uniforms));
+    WGPUContext::instance().device().getQueue().writeBuffer(*uniformBuffer, 0, &uniforms, sizeof(uniforms));
 
     wgpu::RenderPassColorAttachment colorAtt;
     colorAtt.view = targetView;
@@ -402,26 +404,19 @@ void RendererWGPU::drawAtomsImpl(const World& world) {
         sbCapacity_ = count;
     }
 
-    selectedData_.assign(count, 0u);
-    for (const size_t idx : ToolsManager::pickingSystem->getSelectedIndices()) {
-        if (idx < count) {
-            selectedData_[idx] = 1u;
-        }
-    }
-    WGPUContext::instance().queue().writeBuffer(sbSel, 0, selectedData_.data(), count * sizeof(uint32_t));
+    // TODO Очень медленно, надо исправить
+    // selectedData_.assign(count, 0u);
+    // for (const size_t idx : ToolsManager::pickingSystem->getSelectedIndices()) {
+    //     if (idx < count) {
+    //         selectedData_[idx] = 1u;
+    //     }
+    // }
+    // WGPUContext::instance().queue().writeBuffer(sbSel, 0, selectedData_.data(), count * sizeof(selectedData_[0]));
 
-    // maxSpeedSqr для color mode
-    float maxSpeedSqr = 1.f;
-    if (speedColorMode != SpeedColorMode::AtomColor) {
-        maxSpeedSqr = speedGradientMax > 0.f ? speedGradientMax * speedGradientMax
-                                             : 1e-6f; // без CPU доступа к velocities больше не считаем per-frame max
-    }
-    WGPUContext::instance().queue().writeBuffer(uniformBuffer, offsetof(SceneUniforms, maxSpeedSqr), &maxSpeedSqr, sizeof(float));
-
-    currentPass.setPipeline(atomPipeline);
-    currentPass.setBindGroup(0, atomBindGroup, 0, nullptr);
-    currentPass.setVertexBuffer(0, atomQuadVb, 0, atomQuadVb.getSize());
-    currentPass.draw(6, static_cast<uint32_t>(count), 0, 0);
+    currentPass->setPipeline(*atomPipeline);
+    currentPass->setBindGroup(0, *atomBindGroup, 0, nullptr);
+    currentPass->setVertexBuffer(0, *atomQuadVb, 0, atomQuadVb->getSize());
+    currentPass->draw(6, static_cast<uint32_t>(count), 0, 0);
 }
 
 void RendererWGPU::drawBoxImpl(const Vec3f& worldSize) {
@@ -431,24 +426,24 @@ void RendererWGPU::drawBoxImpl(const Vec3f& worldSize) {
         0, 0,  0, x1, 0,  0, x1, 0,  0, x1, 0,  z1, x1, 0,  z1, 0,  0,  z1, 0, 0,  z1, 0, 0,  0,
         0, 0,  0, 0,  y1, 0, x1, 0,  0, x1, y1, 0,  x1, 0,  z1, x1, y1, z1, 0, 0,  z1, 0, y1, z1,
     };
-    WGPUContext::instance().device().getQueue().writeBuffer(boxVb, 0, lines, sizeof(lines));
+    WGPUContext::instance().device().getQueue().writeBuffer(*boxVb, 0, lines, sizeof(lines));
 
     wgpu::BindGroupEntry entry;
     entry.binding = 0;
-    entry.buffer = uniformBuffer;
+    entry.buffer = *uniformBuffer;
     entry.size = sizeof(SceneUniforms);
 
     wgpu::BindGroupDescriptor bgDesc{};
     bgDesc.label = wgpu::StringView("BoxBindGroup");
-    bgDesc.layout = lineBindGroupLayout;
+    bgDesc.layout = *lineBindGroupLayout;
     bgDesc.entryCount = 1;
     bgDesc.entries = &entry;
-    wgpu::BindGroup bg = WGPUContext::instance().device().createBindGroup(bgDesc);
+    wgpu::raii::BindGroup bg = WGPUContext::instance().device().createBindGroup(bgDesc);
 
-    currentPass.setPipeline(boxPipeline);
-    currentPass.setBindGroup(0, bg, 0, nullptr);
-    currentPass.setVertexBuffer(0, boxVb, 0, sizeof(lines));
-    currentPass.draw(24, 1, 0, 0);
+    currentPass->setPipeline(*boxPipeline);
+    currentPass->setBindGroup(0, *bg, 0, nullptr);
+    currentPass->setVertexBuffer(0, *boxVb, 0, sizeof(lines));
+    currentPass->draw(24, 1, 0, 0);
 }
 
 // void RendererWGPU::drawBondsImpl(const AtomStorage& atoms, const Bond::List& bonds) {
@@ -488,7 +483,7 @@ void RendererWGPU::drawBoxImpl(const Vec3f& worldSize) {
 //     bgDesc.layout = lineBindGroupLayout;
 //     bgDesc.entryCount = 1;
 //     bgDesc.entries = &entry;
-//     auto bg = WGPUContext::instance().device().createBindGroup(bgDesc);
+//     wgpu::raii::BindGroup bg = WGPUContext::instance().device().createBindGroup(bgDesc);
 
 //     currentPass.setPipeline(bondPipeline);
 //     currentPass.setBindGroup(0, bg, 0, nullptr);
@@ -502,12 +497,12 @@ void RendererWGPU::drawGridImpl(const World& world) {
     assert(totalCells != 0);
 
     // TODO maxCount пока фиксированный, потом нужно шейдером вычислить
-    float mc = 1.f;
-    WGPUContext::instance().queue().writeBuffer(uniformBuffer, offsetof(SceneUniforms, maxCount), &mc, sizeof(float));
+    constexpr float mc = 1.f;
+    WGPUContext::instance().queue().writeBuffer(*uniformBuffer, offsetof(SceneUniforms, maxCount), &mc, sizeof(float));
 
     std::array<wgpu::BindGroupEntry, 3> entries{};
     entries[0].binding = 0;
-    entries[0].buffer = uniformBuffer;
+    entries[0].buffer = *uniformBuffer;
     entries[0].size = sizeof(SceneUniforms);
 
     entries[1].binding = 1;
@@ -516,25 +511,23 @@ void RendererWGPU::drawGridImpl(const World& world) {
 
     GridUniforms gridUni{};
     gridUni.cellSize = world.getGridCellSize();
-    gridUni.dx = gs.x;
-    gridUni.dy = gs.y;
-    gridUni.dz = gs.z;
-    WGPUContext::instance().queue().writeBuffer(gridUniformBuffer, 0, &gridUni, sizeof(gridUni));
+    gridUni.gridSize = gs;
+    WGPUContext::instance().queue().writeBuffer(*gridUniformBuffer, 0, &gridUni, sizeof(gridUni));
     entries[2].binding = 2;
-    entries[2].buffer = gridUniformBuffer;
+    entries[2].buffer = *gridUniformBuffer;
     entries[2].size = sizeof(GridUniforms);
 
     wgpu::BindGroupDescriptor bgDesc{};
     bgDesc.label = wgpu::StringView("GridBindGroup");
-    bgDesc.layout = gridBindGroupLayout;
+    bgDesc.layout = *gridBindGroupLayout;
     bgDesc.entryCount = entries.size();
     bgDesc.entries = entries.data();
-    auto bg = WGPUContext::instance().device().createBindGroup(bgDesc);
+    wgpu::raii::BindGroup bg = WGPUContext::instance().device().createBindGroup(bgDesc);
 
-    currentPass.setPipeline(gridPipeline);
-    currentPass.setBindGroup(0, bg, 0, nullptr);
-    currentPass.setVertexBuffer(0, gridLineVb, 0, gridLineVb.getSize());
-    currentPass.draw(24, totalCells, 0, 0);
+    currentPass->setPipeline(*gridPipeline);
+    currentPass->setBindGroup(0, *bg, 0, nullptr);
+    currentPass->setVertexBuffer(0, *gridLineVb, 0, gridLineVb->getSize());
+    currentPass->draw(24, totalCells, 0, 0);
 }
 
 void RendererWGPU::uploadRadii(const World& world) {
@@ -547,5 +540,5 @@ void RendererWGPU::uploadRadii(const World& world) {
     for (size_t i = 0; i < count; ++i) {
         radii[i] = AtomData::getProps(static_cast<AtomData::Type>(types[i])).radius;
     }
-    WGPUContext::instance().queue().writeBuffer(sbRadius, 0, radii.data(), count * sizeof(float));
+    WGPUContext::instance().queue().writeBuffer(*sbRadius, 0, radii.data(), count * sizeof(float));
 }

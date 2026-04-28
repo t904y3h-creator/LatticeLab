@@ -55,7 +55,7 @@ void GpuStepOps::buildPipelines() {
         wgpu::ComputePipelineDescriptor d{};
         d.label = wgpu::StringView(label);
         d.layout = layout;
-        d.compute.module = shaderModule_;
+        d.compute.module = *shaderModule_;
         d.compute.entryPoint = wgpu::StringView(entry);
         return WGPUContext::instance().device().createComputePipeline(d);
     };
@@ -68,8 +68,8 @@ void GpuStepOps::buildPipelines() {
             makeStorageBGLE(2, wgpu::BufferBindingType::Storage),
         };
         bgl_confine_ = makeBGL(entries, "confine_BGL");
-        layout_confine_ = makePipelineLayout(bgl_confine_);
-        pipeline_confine_ = makePipeline(layout_confine_, "confine_to_box", "confine_Pipeline");
+        layout_confine_ = makePipelineLayout(*bgl_confine_);
+        pipeline_confine_ = makePipeline(*layout_confine_, "confine_to_box", "confine_Pipeline");
     }
 
     // velcap
@@ -79,8 +79,8 @@ void GpuStepOps::buildPipelines() {
             makeStorageBGLE(1, wgpu::BufferBindingType::Storage),
         };
         bgl_velcap_ = makeBGL(entries, "velcap_BGL");
-        layout_velcap_ = makePipelineLayout(bgl_velcap_);
-        pipeline_velcap_ = makePipeline(layout_velcap_, "post_process_vel", "velcap_Pipeline");
+        layout_velcap_ = makePipelineLayout(*bgl_velcap_);
+        pipeline_velcap_ = makePipeline(*layout_velcap_, "post_process_vel", "velcap_Pipeline");
     }
 }
 
@@ -105,7 +105,7 @@ void GpuStepOps::prepare(const GpuAtomBuffers& buffers) {
         };
         wgpu::BindGroupDescriptor d{};
         d.label = wgpu::StringView("confine_BindGroup");
-        d.layout = bgl_confine_;
+        d.layout = *bgl_confine_;
         d.entryCount = entries.size();
         d.entries = entries.data();
         bindGroupConfine_ = WGPUContext::instance().device().createBindGroup(d);
@@ -119,7 +119,7 @@ void GpuStepOps::prepare(const GpuAtomBuffers& buffers) {
         };
         wgpu::BindGroupDescriptor d{};
         d.label = wgpu::StringView("velcap_BindGroup");
-        d.layout = bgl_velcap_;
+        d.layout = *bgl_velcap_;
         d.entryCount = entries.size();
         d.entries = entries.data();
         bindGroupVelCap_ = WGPUContext::instance().device().createBindGroup(d);
@@ -128,30 +128,30 @@ void GpuStepOps::prepare(const GpuAtomBuffers& buffers) {
 
 void GpuStepOps::recordConfine(wgpu::CommandEncoder enc, uint32_t atomCount) {
     assert(isReady());
-    assert(bindGroupConfine_ != nullptr);
+    assert(*bindGroupConfine_ != nullptr);
 
     wgpu::ComputePassDescriptor pd{};
     pd.label = wgpu::StringView("confine_to_box pass");
-    auto pass = enc.beginComputePass(pd);
-    pass.setPipeline(pipeline_confine_);
+    wgpu::raii::ComputePassEncoder pass = enc.beginComputePass(pd);
+    pass->setPipeline(*pipeline_confine_);
 
     uint32_t dynOffset = kConfineOffset;
-    pass.setBindGroup(0, bindGroupConfine_, 1, &dynOffset);
-    pass.dispatchWorkgroups((atomCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
-    pass.end();
+    pass->setBindGroup(0, *bindGroupConfine_, 1, &dynOffset);
+    pass->dispatchWorkgroups((atomCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
+    pass->end();
 }
 
 void GpuStepOps::recordVelCap(wgpu::CommandEncoder enc, uint32_t atomCount) {
     assert(isReady());
-    assert(bindGroupVelCap_ != nullptr);
+    assert(*bindGroupVelCap_ != nullptr);
 
     wgpu::ComputePassDescriptor pd{};
     pd.label = wgpu::StringView("post_process_vel pass");
-    auto pass = enc.beginComputePass(pd);
-    pass.setPipeline(pipeline_velcap_);
+    wgpu::raii::ComputePassEncoder pass = enc.beginComputePass(pd);
+    pass->setPipeline(*pipeline_velcap_);
 
     uint32_t dynOffset = kVelCapOffset;
-    pass.setBindGroup(0, bindGroupVelCap_, 1, &dynOffset);
-    pass.dispatchWorkgroups((atomCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
-    pass.end();
+    pass->setBindGroup(0, *bindGroupVelCap_, 1, &dynOffset);
+    pass->dispatchWorkgroups((atomCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
+    pass->end();
 }

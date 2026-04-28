@@ -1,18 +1,19 @@
-// #include <benchmark/benchmark.h>
+#include <benchmark/benchmark.h>
+#include <webgpu/webgpu.hpp>
 
-// #include "Benchmarks/fixtures/RendererFixture.h"
-// #include "Rendering/2d/Renderer2DWGPU.h"
+#include "Benchmarks/fixtures/RendererFixture.h"
+#include "Rendering/2d/Renderer2DWGPU.h"
 
-// // @bench_meta {"id":"RendererFixture<Renderer2D>/DrawShot2D","ru":"Отрисовка кадра 2D","group":"Рендер/2D"}
-// BENCHMARK_TEMPLATE_DEFINE_F(RendererFixture, DrawShot2D, Renderer2DWGPU)(benchmark::State& state) {
-//     auto& ctx = WGPUContext::instance();
-//     for (auto _ : state) {
-//         renderer_->drawShot(colorTextureView_, ctx.depthView(), world, bonds_, box_);
-//         renderer_->endFrame();
-//         // Ждём GPU чтобы измерить реальное время а не только submit
-//         ctx.device().poll(true, nullptr);
-//     }
-//     setCounters(state);
-// }
+// @bench_meta {"id":"RendererFixture<Renderer2D>/DrawShot2D","ru":"Отрисовка кадра 2D","group":"Рендер/2D"}
+BENCHMARK_TEMPLATE_DEFINE_F(RendererFixture, DrawShot2D, Renderer2DWGPU)(benchmark::State& state) {
+    auto& ctx = WGPUContext::instance();
+    wgpu::CommandEncoder encoder = ctx.device().createCommandEncoder();
+    for (auto _ : state) {
+        renderer_->drawShot(encoder, *colorTextureView_, ctx.depthView(), world);
+        // Ждём GPU чтобы измерить реальное время а не только submit
+        ctx.device().poll(true, nullptr);
+    }
+    setCounters(state);
+}
 
-// BENCHMARK_REGISTER_F(RendererFixture, DrawShot2D)->RangeMultiplier(8)->Range(125, 8000);
+BENCHMARK_REGISTER_F(RendererFixture, DrawShot2D)->RangeMultiplier(8)->Range(125, 8000);

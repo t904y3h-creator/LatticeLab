@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include <webgpu/webgpu.hpp>
+#include <webgpu/webgpu-raii.hpp>
 
 #include "Engine/World.h"
 #include "Rendering/camera/Camera.h"

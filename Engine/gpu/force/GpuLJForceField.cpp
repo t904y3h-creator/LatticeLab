@@ -53,7 +53,7 @@ void GpuLJForceField::buildPipeline() {
     bglDesc.entries = bglEntries.data();
     bindGroupLayout_ = ctx.device().createBindGroupLayout(bglDesc);
 
-    WGPUBindGroupLayout rawBGL = bindGroupLayout_;
+    WGPUBindGroupLayout rawBGL = *bindGroupLayout_;
     wgpu::PipelineLayoutDescriptor plDesc{};
     plDesc.label = wgpu::StringView("LJ_PipelineLayout");
     plDesc.bindGroupLayoutCount = 1;
@@ -62,8 +62,8 @@ void GpuLJForceField::buildPipeline() {
 
     wgpu::ComputePipelineDescriptor cpDesc{};
     cpDesc.label = wgpu::StringView("LJ_Pipeline");
-    cpDesc.layout = pipelineLayout_;
-    cpDesc.compute.module = shaderModule_;
+    cpDesc.layout = *pipelineLayout_;
+    cpDesc.compute.module = *shaderModule_;
     cpDesc.compute.entryPoint = wgpu::StringView("main");
     pipeline_ = ctx.device().createComputePipeline(cpDesc);
 }
@@ -81,7 +81,7 @@ void GpuLJForceField::uploadLJTable(const LJTable& ljTable) {
 
     const size_t bytes = table.size() * sizeof(table[0]);
     ljTableBuffer_ = WGPUContext::instance().createBuffer(bytes, wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst, "LJ_Table");
-    WGPUContext::instance().queue().writeBuffer(ljTableBuffer_, 0, table.data(), bytes);
+    WGPUContext::instance().queue().writeBuffer(*ljTableBuffer_, 0, table.data(), bytes);
 }
 
 void GpuLJForceField::prepare(const GpuAtomBuffers& atomBufs, const GpuGridBuffers& gridBufs) {
@@ -107,12 +107,12 @@ void GpuLJForceField::prepare(const GpuAtomBuffers& atomBufs, const GpuGridBuffe
     entries[3] = makeBE(3, atomBufs.bufPe(), cap * sizeof(float));
     entries[4] = makeBE(4, gridBufs.bufOffsets(), (nCells + 1) * sizeof(uint32_t));
     entries[5] = makeBE(5, gridBufs.bufAtomsInCells(), u32Bytes);
-    entries[6] = makeBE(6, ljTableBuffer_, tableBytes);
+    entries[6] = makeBE(6, *ljTableBuffer_, tableBytes);
     entries[7] = makeBE(7, atomBufs.bufAtomType(), u32Bytes);
 
     wgpu::BindGroupDescriptor bgDesc{};
     bgDesc.label = wgpu::StringView("LJ_BindGroup");
-    bgDesc.layout = bindGroupLayout_;
+    bgDesc.layout = *bindGroupLayout_;
     bgDesc.entryCount = entries.size();
     bgDesc.entries = entries.data();
     bindGroup_ = WGPUContext::instance().device().createBindGroup(bgDesc);
@@ -120,15 +120,15 @@ void GpuLJForceField::prepare(const GpuAtomBuffers& atomBufs, const GpuGridBuffe
 
 void GpuLJForceField::record(wgpu::CommandEncoder enc, uint32_t atomCount) {
     assert(isReady());
-    assert(bindGroup_ != nullptr);
+    assert(*bindGroup_ != nullptr);
 
     wgpu::ComputePassDescriptor pd{};
     pd.label = wgpu::StringView("LJ_forces");
-    auto pass = enc.beginComputePass(pd);
-    pass.setPipeline(pipeline_);
+    wgpu::raii::ComputePassEncoder pass(enc.beginComputePass(pd));
+    pass->setPipeline(*pipeline_);
 
     uint32_t dynOffset = kUniformOffset;
-    pass.setBindGroup(0, bindGroup_, 1, &dynOffset);
-    pass.dispatchWorkgroups((atomCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
-    pass.end();
+    pass->setBindGroup(0, *bindGroup_, 1, &dynOffset);
+    pass->dispatchWorkgroups((atomCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
+    pass->end();
 }

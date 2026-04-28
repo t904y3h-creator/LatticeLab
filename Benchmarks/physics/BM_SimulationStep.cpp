@@ -1,5 +1,5 @@
 #include <benchmark/benchmark.h>
-#include <webgpu/webgpu.hpp>
+#include <webgpu/webgpu-raii.hpp>
 
 #include "Benchmarks/fixtures/SimulationFixture.h"
 
@@ -20,19 +20,19 @@ BENCHMARK_DEFINE_F(SimulationFixture, FullStepWithNeighborList)(benchmark::State
 
     wgpu::CommandEncoderDescriptor desc;
     desc.label = wgpu::StringView("PhysicsEncoder");
-    wgpu::CommandEncoder physEnc = ctx.device().createCommandEncoder(desc);
+    wgpu::raii::CommandEncoder physEnc = ctx.device().createCommandEncoder(desc);
 
     for (auto _ : state) {
         wgpu::CommandEncoderDescriptor desc;
-        wgpu::CommandEncoder physEnc = ctx.device().createCommandEncoder(desc);
+        wgpu::raii::CommandEncoder physEnc = ctx.device().createCommandEncoder(desc);
 
         for (int i = 0; i < 10'000; ++i) {
-            simulation_->step(physEnc);
+            simulation_->step(*physEnc);
         }
 
-        wgpu::CommandBuffer cmd = physEnc.finish();
+        wgpu::raii::CommandBuffer cmd = physEnc->finish();
 
-        ctx.queue().submit(1, &cmd);
+        ctx.queue().submit(1, &(*cmd));
 
         ctx.device().poll(true, nullptr);
     }

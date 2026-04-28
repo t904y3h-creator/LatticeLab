@@ -2,17 +2,16 @@ struct SceneUniforms {
     view       : mat4x4f,
     projection : mat4x4f,
     lightDir   : vec4f,
-    colorMode  : vec4f,
-    maxSpeedSqr: vec4f,
-    maxCount   : vec4f,
+    colorMode  : u32,
+    maxSpeedSqr: f32,
+    maxCount   : u32,
+    _pad       : f32,
     typeColors : array<vec4f, 119>,
 }
 
 struct GridUniforms {
+    gridSize : vec3u,
     cellSize : f32,
-    dx       : u32,
-    dy       : u32,
-    dz       : u32,
 }
 
 @group(0) @binding(0) var<uniform>       uScene    : SceneUniforms;
@@ -35,14 +34,14 @@ fn vs_main(
         return VertOut(vec4f(0.0, 0.0, -2.0, 1.0), vec4f(0.0));
     }
 
-    let cx = instIdx % uGrid.dx;
-    let cy = (instIdx / uGrid.dx) % uGrid.dy;
-    let cz = instIdx / (uGrid.dx * uGrid.dy);
+    let cx = instIdx % uGrid.gridSize.x;
+    let cy = (instIdx / uGrid.gridSize.x) % uGrid.gridSize.y;
+    let cz = instIdx / (uGrid.gridSize.x * uGrid.gridSize.y);
 
     let origin   = vec3f(f32(cx), f32(cy), f32(cz)) * uGrid.cellSize;
     let worldPos = origin + localPos * uGrid.cellSize;
 
-    let t     = clamp(f32(cnt) / uScene.maxCount.x, 0.0, 1.0);
+    let t     = clamp(f32(cnt) / f32(uScene.maxCount), 0.0, 1.0);
     let color = mix(vec4f(0.0, 1.0, 0.0, 0.3), vec4f(1.0, 0.0, 0.0, 0.3), t);
 
     return VertOut(

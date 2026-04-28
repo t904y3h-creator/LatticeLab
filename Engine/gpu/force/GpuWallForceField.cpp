@@ -3,6 +3,8 @@
 #include <array>
 #include <cassert>
 
+#include <webgpu/webgpu-raii.hpp>
+
 #include "Engine/gpu/GpuAtomBuffers.h"
 #include "Engine/gpu/WGPUContext.h"
 #include "generated/shaders/force_wall.wgsl.h"
@@ -41,7 +43,7 @@ void GpuWallForceField::buildPipeline() {
     bglDesc.entries = bglEntries.data();
     bindGroupLayout_ = WGPUContext::instance().device().createBindGroupLayout(bglDesc);
 
-    WGPUBindGroupLayout rawBGL = bindGroupLayout_;
+    WGPUBindGroupLayout rawBGL = *bindGroupLayout_;
     wgpu::PipelineLayoutDescriptor plDesc{};
     plDesc.label = wgpu::StringView("Wall_PipelineLayout");
     plDesc.bindGroupLayoutCount = 1;
@@ -50,8 +52,8 @@ void GpuWallForceField::buildPipeline() {
 
     wgpu::ComputePipelineDescriptor cpDesc{};
     cpDesc.label = wgpu::StringView("Wall_Pipeline");
-    cpDesc.layout = pipelineLayout_;
-    cpDesc.compute.module = shaderModule_;
+    cpDesc.layout = *pipelineLayout_;
+    cpDesc.compute.module = *shaderModule_;
     cpDesc.compute.entryPoint = wgpu::StringView("main");
     pipeline_ = WGPUContext::instance().device().createComputePipeline(cpDesc);
 }
@@ -75,7 +77,7 @@ void GpuWallForceField::prepare(const GpuAtomBuffers& atomBufs) {
 
     wgpu::BindGroupDescriptor bgDesc{};
     bgDesc.label = wgpu::StringView("Wall_BindGroup");
-    bgDesc.layout = bindGroupLayout_;
+    bgDesc.layout = *bindGroupLayout_;
     bgDesc.entryCount = entries.size();
     bgDesc.entries = entries.data();
     bindGroup_ = WGPUContext::instance().device().createBindGroup(bgDesc);
@@ -83,15 +85,15 @@ void GpuWallForceField::prepare(const GpuAtomBuffers& atomBufs) {
 
 void GpuWallForceField::record(wgpu::CommandEncoder enc, uint32_t atomCount) {
     assert(isReady());
-    assert(bindGroup_ != nullptr);
+    assert(*bindGroup_ != nullptr);
 
     wgpu::ComputePassDescriptor pd{};
     pd.label = wgpu::StringView("WallForces pass");
-    auto pass = enc.beginComputePass(pd);
-    pass.setPipeline(pipeline_);
+    wgpu::raii::ComputePassEncoder pass(enc.beginComputePass(pd));
+    pass->setPipeline(*pipeline_);
 
     uint32_t dynOffset = kUniformOffset;
-    pass.setBindGroup(0, bindGroup_, 1, &dynOffset);
-    pass.dispatchWorkgroups((atomCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
-    pass.end();
+    pass->setBindGroup(0, *bindGroup_, 1, &dynOffset);
+    pass->dispatchWorkgroups((atomCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
+    pass->end();
 }

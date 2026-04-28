@@ -6,7 +6,7 @@
 #include <cassert>
 #include <cstring>
 
-#include <webgpu/webgpu.hpp>
+#include <webgpu/webgpu-raii.hpp>
 
 #include "Engine/gpu/WGPUContext.h"
 #include "generated/shaders/verlet_predict.wgsl.h"
@@ -48,7 +48,7 @@ void GpuVerletPredict::buildPipeline() {
     bglDesc.entries = bglEntries.data();
     bindGroupLayout_ = WGPUContext::instance().device().createBindGroupLayout(bglDesc);
 
-    WGPUBindGroupLayout rawBGL = bindGroupLayout_;
+    WGPUBindGroupLayout rawBGL = *bindGroupLayout_;
     wgpu::PipelineLayoutDescriptor plDesc{};
     plDesc.label = wgpu::StringView("VerletPredict_PipelineLayout");
     plDesc.bindGroupLayoutCount = 1;
@@ -57,15 +57,15 @@ void GpuVerletPredict::buildPipeline() {
 
     wgpu::ComputePipelineDescriptor cpDesc{};
     cpDesc.label = wgpu::StringView("VerletPredict_Pipeline");
-    cpDesc.layout = pipelineLayout_;
-    cpDesc.compute.module = shaderModule_;
+    cpDesc.layout = *pipelineLayout_;
+    cpDesc.compute.module = *shaderModule_;
     cpDesc.compute.entryPoint = wgpu::StringView("main");
     pipeline_ = WGPUContext::instance().device().createComputePipeline(cpDesc);
 }
 
 void GpuVerletPredict::prepare(const GpuAtomBuffers& buffers) {
     assert(sharedUniforms_ != nullptr);
-    assert(bindGroupLayout_ != nullptr);
+    assert(*bindGroupLayout_ != nullptr);
 
     const size_t cap = buffers.countAtoms();
     const size_t vec4Bytes = cap * 4 * sizeof(float);
@@ -89,7 +89,7 @@ void GpuVerletPredict::prepare(const GpuAtomBuffers& buffers) {
 
     wgpu::BindGroupDescriptor bgDesc{};
     bgDesc.label = wgpu::StringView("VerletPredict_BindGroup");
-    bgDesc.layout = bindGroupLayout_;
+    bgDesc.layout = *bindGroupLayout_;
     bgDesc.entryCount = entries.size();
     bgDesc.entries = entries.data();
     bindGroup_ = WGPUContext::instance().device().createBindGroup(bgDesc);
@@ -97,16 +97,14 @@ void GpuVerletPredict::prepare(const GpuAtomBuffers& buffers) {
 
 void GpuVerletPredict::record(wgpu::CommandEncoder& enc, uint32_t atomCount) {
     assert(isReady());
-    assert(bindGroup_ != nullptr);
+    assert(*bindGroup_ != nullptr);
 
     wgpu::ComputePassDescriptor passDesc{};
     passDesc.label = wgpu::StringView("VerletPredict pass");
-    wgpu::ComputePassEncoder pass = enc.beginComputePass(passDesc);
+    wgpu::raii::ComputePassEncoder pass(enc.beginComputePass(passDesc));
+    pass->setPipeline(*pipeline_);
 
-    pass.setPipeline(pipeline_);
-
-    pass.setBindGroup(0, bindGroup_, 1, &kUniformOffset);
-
-    pass.dispatchWorkgroups((atomCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
-    pass.end();
+    pass->setBindGroup(0, *bindGroup_, 1, &kUniformOffset);
+    pass->dispatchWorkgroups((atomCount + kWorkgroupSize - 1) / kWorkgroupSize, 1, 1);
+    pass->end();
 }

@@ -3,8 +3,7 @@
 #include <iostream>
 #include <stdexcept>
 
-#include <webgpu/webgpu.hpp>
-#include <wgpu.h>
+#include <webgpu/webgpu-raii.hpp>
 
 #if defined(__linux__)
 #define GLFW_EXPOSE_NATIVE_X11
@@ -33,7 +32,7 @@ public:
 #ifndef NDEBUG
         WGPUInstanceExtras extras{};
         extras.chain.sType = (WGPUSType)WGPUNativeSType::WGPUSType_InstanceExtras;
-        extras.flags = WGPUInstanceFlag_Debug;
+        extras.flags = WGPUInstanceFlag_Debug | WGPUInstanceFlag_Validation;
         instanceDesc.nextInChain = &extras.chain;
 #endif
 
@@ -48,10 +47,10 @@ public:
         }
 
         wgpu::RequestAdapterOptions adapterOpts{};
-        adapterOpts.compatibleSurface = surface_;
+        adapterOpts.compatibleSurface = *surface_;
         adapterOpts.powerPreference = wgpu::PowerPreference::HighPerformance;
 
-        adapter_ = instance_.requestAdapter(adapterOpts);
+        adapter_ = instance_->requestAdapter(adapterOpts);
         if (!adapter_) {
             throw std::runtime_error("wgpu: failed to get adapter");
         }
@@ -64,15 +63,15 @@ public:
             std::cerr << "wgpu error (" << type << "): " << std::string_view(msg.data, msg.length) << "\n";
         };
 
-        device_ = adapter_.requestDevice(deviceDesc);
+        device_ = adapter_->requestDevice(deviceDesc);
         if (!device_) {
             throw std::runtime_error("wgpu: failed to get device");
         }
 
-        queue_ = device_.getQueue();
+        queue_ = device_->getQueue();
 
         wgpu::SurfaceCapabilities caps{};
-        surface_.getCapabilities(adapter_, &caps);
+        surface_->getCapabilities(*adapter_, &caps);
         surfaceFormat_ = caps.formats[0];
         for (size_t i = 0; i < caps.formatCount; ++i) {
             if (caps.formats[i] == wgpu::TextureFormat::BGRA8Unorm || caps.formats[i] == wgpu::TextureFormat::RGBA8Unorm) {
@@ -82,13 +81,13 @@ public:
         }
 
         wgpu::SurfaceConfiguration surfaceConfig{};
-        surfaceConfig.device = device_;
+        surfaceConfig.device = *device_;
         surfaceConfig.format = surfaceFormat_;
         surfaceConfig.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopyDst;
         surfaceConfig.width = width;
         surfaceConfig.height = height;
         surfaceConfig.presentMode = wgpu::PresentMode::Mailbox;
-        surface_.configure(surfaceConfig);
+        surface_->configure(surfaceConfig);
 
         createDepthTexture(width, height);
 
@@ -119,7 +118,7 @@ public:
         // Без surface — просто берём любой адаптер
         wgpu::RequestAdapterOptions adapterOpts{};
         adapterOpts.powerPreference = wgpu::PowerPreference::HighPerformance;
-        adapter_ = instance_.requestAdapter(adapterOpts);
+        adapter_ = instance_->requestAdapter(adapterOpts);
         if (!adapter_) {
             throw std::runtime_error("wgpu: failed to get adapter");
         }
@@ -131,12 +130,12 @@ public:
         deviceDesc.uncapturedErrorCallbackInfo.callback = [](WGPUDevice const*, WGPUErrorType type, WGPUStringView msg, void*, void*) {
             std::cerr << "wgpu error (" << type << "): " << std::string_view(msg.data, msg.length) << "\n";
         };
-        device_ = adapter_.requestDevice(deviceDesc);
+        device_ = adapter_->requestDevice(deviceDesc);
         if (!device_) {
             throw std::runtime_error("wgpu: failed to get device");
         }
 
-        queue_ = device_.getQueue();
+        queue_ = device_->getQueue();
         surfaceFormat_ = wgpu::TextureFormat::RGBA8Unorm; // фиксированный формат для headless
 
         createDepthTexture(width, height);
@@ -151,13 +150,13 @@ public:
         }
 
         wgpu::SurfaceConfiguration surfaceConfig{};
-        surfaceConfig.device = device_;
+        surfaceConfig.device = *device_;
         surfaceConfig.format = surfaceFormat_;
         surfaceConfig.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopyDst;
         surfaceConfig.width = width;
         surfaceConfig.height = height;
         surfaceConfig.presentMode = wgpu::PresentMode::Mailbox;
-        surface_.configure(surfaceConfig);
+        surface_->configure(surfaceConfig);
 
         createDepthTexture(width, height);
 
@@ -165,31 +164,22 @@ public:
         height_ = height;
     }
 
-    void present() { surface_.present(); }
-    void processEvents() { device_.poll(false, nullptr); }
+    void present() { surface_->present(); }
+    void processEvents() { device_->poll(false, nullptr); }
 
     void shutdown() {
         if (!initialized_) {
             return;
         }
-        depthTextureView_ = nullptr;
-        depthTexture_ = nullptr;
-        surface_.unconfigure();
-        queue_ = nullptr;
-        device_ = nullptr;
-        adapter_ = nullptr;
-        surface_ = nullptr;
-        instance_ = nullptr;
-        initialized_ = false;
     }
 
     ~WGPUContext() { shutdown(); }
 
-    wgpu::Device device() const { return device_; }
-    wgpu::Queue queue() const { return queue_; }
-    wgpu::Surface surface() const { return surface_; }
+    wgpu::Device device() const { return *device_; }
+    wgpu::Queue queue() const { return *queue_; }
+    wgpu::Surface surface() const { return *surface_; }
     wgpu::TextureFormat surfaceFormat() const { return surfaceFormat_; }
-    wgpu::TextureView depthView() const { return depthTextureView_; }
+    wgpu::TextureView depthView() const { return *depthTextureView_; }
     uint32_t width() const { return width_; }
     uint32_t height() const { return height_; }
 
@@ -199,7 +189,7 @@ public:
         desc.size = bytes;
         desc.usage = usage;
         desc.mappedAtCreation = mappedAtCreation;
-        return device_.createBuffer(desc);
+        return device_->createBuffer(desc);
     }
 
 private:
@@ -214,7 +204,7 @@ private:
         wgpu::SurfaceDescriptor desc{};
         desc.label = wgpu::StringView("Surface");
         desc.nextInChain = &xlibSrc.chain;
-        return instance_.createSurface(desc);
+        return instance_->createSurface(desc);
 
 #elif defined(_WIN32)
         wgpu::SurfaceSourceWindowsHWND hwndSrc{};
@@ -238,9 +228,6 @@ private:
     }
 
     void createDepthTexture(uint32_t width, uint32_t height) {
-        depthTextureView_ = nullptr;
-        depthTexture_ = nullptr;
-
         wgpu::TextureDescriptor depthDesc{};
         depthDesc.label = wgpu::StringView("Depth Texture");
         depthDesc.size = {width, height, 1};
@@ -249,7 +236,7 @@ private:
         depthDesc.mipLevelCount = 1;
         depthDesc.sampleCount = 1;
         depthDesc.dimension = wgpu::TextureDimension::_2D;
-        depthTexture_ = device_.createTexture(depthDesc);
+        depthTexture_ = device_->createTexture(depthDesc);
 
         wgpu::TextureViewDescriptor viewDesc{};
         viewDesc.label = wgpu::StringView("Depth Texture View");
@@ -258,18 +245,18 @@ private:
         viewDesc.mipLevelCount = 1;
         viewDesc.arrayLayerCount = 1;
         viewDesc.aspect = wgpu::TextureAspect::DepthOnly;
-        depthTextureView_ = depthTexture_.createView(viewDesc);
+        depthTextureView_ = depthTexture_->createView(viewDesc);
     }
 
     bool initialized_ = false;
 
-    wgpu::Instance instance_ = nullptr;
-    wgpu::Adapter adapter_ = nullptr;
-    wgpu::Device device_ = nullptr;
-    wgpu::Queue queue_ = nullptr;
-    wgpu::Surface surface_ = nullptr;
-    wgpu::Texture depthTexture_ = nullptr;
-    wgpu::TextureView depthTextureView_ = nullptr;
+    wgpu::raii::Instance instance_;
+    wgpu::raii::Adapter adapter_;
+    wgpu::raii::Device device_;
+    wgpu::raii::Queue queue_;
+    wgpu::raii::Surface surface_;
+    wgpu::raii::Texture depthTexture_;
+    wgpu::raii::TextureView depthTextureView_;
 
     wgpu::TextureFormat surfaceFormat_ = wgpu::TextureFormat::Undefined;
     uint32_t width_ = 0;

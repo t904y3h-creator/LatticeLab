@@ -33,6 +33,10 @@ void World::downloadAll(std::vector<Vec3f>& positions, std::vector<Vec3f>& veloc
                         std::vector<float>& invMasses, std::vector<float>& charges, std::vector<float>& pe, std::vector<uint32_t>& types,
                         std::vector<uint32_t>& valences) const {
     const size_t count = atomBuffers.countAtoms();
+    if (count == 0) {
+        return;
+    }
+
     positions.resize(count);
     velocities.resize(count);
     forces.resize(count);

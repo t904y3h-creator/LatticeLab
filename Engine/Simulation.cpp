@@ -1,6 +1,6 @@
 #include "Simulation.h"
 
-#include <webgpu/webgpu.hpp>
+#include <webgpu/webgpu-raii.hpp>
 
 Simulation::Simulation(World& world) : world_(world), pipeline_(world) {}
 

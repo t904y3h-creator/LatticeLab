@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-#include <webgpu/webgpu.hpp>
+#include <webgpu/webgpu-raii.hpp>
 
 class GpuAtomBuffers;
 
@@ -30,7 +30,7 @@ public:
     GpuStepOps(const GpuStepOps&) = delete;
     GpuStepOps& operator=(const GpuStepOps&) = delete;
 
-    bool isReady() const { return pipeline_confine_ != nullptr; }
+    bool isReady() const { return *pipeline_confine_ != nullptr; }
 
     void prepare(const GpuAtomBuffers& buffers);
     void recordConfine(wgpu::CommandEncoder enc, uint32_t atomCount);
@@ -41,18 +41,18 @@ private:
 
     wgpu::Buffer sharedUniforms_;
 
-    wgpu::BindGroup bindGroupConfine_ = nullptr;
-    wgpu::BindGroup bindGroupVelCap_ = nullptr;
+    wgpu::raii::BindGroup bindGroupConfine_;
+    wgpu::raii::BindGroup bindGroupVelCap_;
 
-    wgpu::ShaderModule shaderModule_ = nullptr;
+    wgpu::raii::ShaderModule shaderModule_;
 
-    wgpu::BindGroupLayout bgl_confine_ = nullptr;
-    wgpu::PipelineLayout layout_confine_ = nullptr;
-    wgpu::ComputePipeline pipeline_confine_ = nullptr;
+    wgpu::raii::BindGroupLayout bgl_confine_;
+    wgpu::raii::PipelineLayout layout_confine_;
+    wgpu::raii::ComputePipeline pipeline_confine_;
 
-    wgpu::BindGroupLayout bgl_velcap_ = nullptr;
-    wgpu::PipelineLayout layout_velcap_ = nullptr;
-    wgpu::ComputePipeline pipeline_velcap_ = nullptr;
+    wgpu::raii::BindGroupLayout bgl_velcap_;
+    wgpu::raii::PipelineLayout layout_velcap_;
+    wgpu::raii::ComputePipeline pipeline_velcap_;
 
     static constexpr uint32_t kWorkgroupSize = 64;
 };

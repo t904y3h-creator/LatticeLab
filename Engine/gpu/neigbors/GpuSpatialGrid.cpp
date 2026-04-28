@@ -3,6 +3,8 @@
 #include <array>
 #include <cassert>
 
+#include <webgpu/webgpu-raii.hpp>
+
 #include "Engine/World.h"
 #include "Engine/gpu/WGPUContext.h"
 #include "Engine/gpu/neigbors/GpuGridBuffers.h"
@@ -49,7 +51,7 @@ void GpuSpatialGrid::buildPipelines() {
     bglDesc.entries = bglEntries.data();
     bindGroupLayout_ = ctx.device().createBindGroupLayout(bglDesc);
 
-    WGPUBindGroupLayout rawBGL = bindGroupLayout_;
+    WGPUBindGroupLayout rawBGL = *bindGroupLayout_;
     wgpu::PipelineLayoutDescriptor plDesc{};
     plDesc.label = wgpu::StringView("SpatialGrid_PipelineLayout");
     plDesc.bindGroupLayoutCount = 1;
@@ -59,8 +61,8 @@ void GpuSpatialGrid::buildPipelines() {
     auto makePipeline = [&](std::string_view entry, std::string_view label) {
         wgpu::ComputePipelineDescriptor d{};
         d.label = wgpu::StringView(label);
-        d.layout = pipelineLayout_;
-        d.compute.module = shaderModule_;
+        d.layout = *pipelineLayout_;
+        d.compute.module = *shaderModule_;
         d.compute.entryPoint = wgpu::StringView(entry);
         return ctx.device().createComputePipeline(d);
     };
@@ -97,27 +99,15 @@ void GpuSpatialGrid::prepare(const GpuGridBuffers& gridBufs, wgpu::Buffer bufPos
 
     wgpu::BindGroupDescriptor bgDesc{};
     bgDesc.label = wgpu::StringView("SpatialGrid_BindGroup");
-    bgDesc.layout = bindGroupLayout_;
+    bgDesc.layout = *bindGroupLayout_;
     bgDesc.entryCount = entries.size();
     bgDesc.entries = entries.data();
     bindGroup_ = WGPUContext::instance().device().createBindGroup(bgDesc);
 }
 
-void GpuSpatialGrid::runPass(wgpu::CommandEncoder enc, wgpu::ComputePipeline pipeline, uint32_t workgroupsX, std::string_view label) const {
-    wgpu::ComputePassDescriptor pd{};
-    pd.label = wgpu::StringView(label);
-    auto pass = enc.beginComputePass(pd);
-    pass.setPipeline(pipeline);
-
-    uint32_t dynOffset = kUniformOffset;
-    pass.setBindGroup(0, bindGroup_, 1, &dynOffset);
-    pass.dispatchWorkgroups(workgroupsX, 1, 1);
-    pass.end();
-}
-
 void GpuSpatialGrid::record(wgpu::CommandEncoder enc, const World& world) {
     assert(isReady());
-    assert(bindGroup_ != nullptr);
+    assert(*bindGroup_ != nullptr);
 
     const Vec3u& gs = world.getGridSize();
     const uint32_t nAtoms = static_cast<uint32_t>(world.getAtomBuffers().countAtoms());
@@ -128,9 +118,26 @@ void GpuSpatialGrid::record(wgpu::CommandEncoder enc, const World& world) {
 
     enc.clearBuffer(world.getGridBuffers().bufCount(), 0, nCells * sizeof(uint32_t));
 
-    runPass(enc, pipeline_count_, workgroupsAtoms, "grid_count pass");
-    runPass(enc, pipeline_scanBlocks_, blockCount, "grid_scan_blocks pass");
-    runPass(enc, pipeline_scanLevel2_, 1, "grid_scan_level2 pass");
-    runPass(enc, pipeline_addOffsets_, blockCount, "grid_add_offsets pass");
-    runPass(enc, pipeline_sort_, workgroupsAtoms, "grid_sort pass");
+    wgpu::ComputePassDescriptor pd{};
+    pd.label = wgpu::StringView("GpuSpatialGrid pass");
+    wgpu::raii::ComputePassEncoder pass = enc.beginComputePass(pd);
+
+    pass->setBindGroup(0, *bindGroup_, 1, &kUniformOffset);
+
+    pass->setPipeline(*pipeline_count_);
+    pass->dispatchWorkgroups(workgroupsAtoms, 1, 1);
+
+    pass->setPipeline(*pipeline_scanBlocks_);
+    pass->dispatchWorkgroups(blockCount, 1, 1);
+
+    pass->setPipeline(*pipeline_scanLevel2_);
+    pass->dispatchWorkgroups(1, 1, 1);
+
+    pass->setPipeline(*pipeline_addOffsets_);
+    pass->dispatchWorkgroups(blockCount, 1, 1);
+
+    pass->setPipeline(*pipeline_sort_);
+    pass->dispatchWorkgroups(workgroupsAtoms, 1, 1);
+
+    pass->end();
 }

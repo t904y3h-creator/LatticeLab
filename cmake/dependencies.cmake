@@ -24,7 +24,7 @@ FetchContent_MakeAvailable(glfw)
 FetchContent_Declare(
     webgpu_distribution
     GIT_REPOSITORY https://github.com/eliemichel/WebGPU-distribution.git
-    GIT_TAG        wgpu-v24.0.0.2
+    GIT_TAG        v0.3.0-gamma
     GIT_SHALLOW    ON
 )
 set(WEBGPU_BACKEND "WGPU" CACHE STRING "WebGPU backend" FORCE)
@@ -42,7 +42,7 @@ FetchContent_MakeAvailable(webgpu_cpp)
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG        v1.92.3
+    GIT_TAG        v1.92.7
     GIT_SHALLOW    ON
 )
 FetchContent_MakeAvailable(imgui)

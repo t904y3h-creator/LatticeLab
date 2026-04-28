@@ -2,7 +2,7 @@
 
 #include <cassert>
 
-#include <webgpu/webgpu.hpp>
+#include <webgpu/webgpu-raii.hpp>
 
 #include "Engine/World.h"
 #include "Engine/gpu/WGPUContext.h"

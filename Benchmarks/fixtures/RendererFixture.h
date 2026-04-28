@@ -19,6 +19,8 @@ concept IsRenderer = std::derived_from<T, IRenderer>;
 
 template <IsRenderer TRenderer> class RendererFixture : public benchmark::Fixture {
 public:
+    RendererFixture() : world(Vec3f(160, 160, 160), 1) {}
+
     void SetUp(benchmark::State& state) override {
         auto& ctx = WGPUContext::instance();
         ctx.initHeadless(800, 600);
@@ -32,10 +34,10 @@ public:
         colorDesc.sampleCount = 1;
         colorDesc.dimension = wgpu::TextureDimension::_2D;
         colorTexture_ = ctx.device().createTexture(colorDesc);
-        colorTextureView_ = colorTexture_.createView();
+        colorTextureView_ = colorTexture_->createView();
 
         makeGridAtoms(world, static_cast<int>(state.range(0)));
-        renderer_ = std::make_unique<TRenderer>(world, ctx.device(), ctx.surfaceFormat());
+        renderer_ = std::make_unique<TRenderer>(ctx.surfaceFormat(), world);
         renderer_->camera.setScreenSize({800.0f, 600.0f});
 
         ToolsManager::pickingSystem = new PickingSystem(world, renderer_);
@@ -44,8 +46,6 @@ public:
     void TearDown(benchmark::State&) override {
         // Дожидаемся завершения GPU работы
         WGPUContext::instance().device().poll(true, nullptr);
-        colorTextureView_ = nullptr;
-        colorTexture_ = nullptr;
         renderer_.reset();
     }
 
@@ -54,8 +54,8 @@ protected:
         state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(world.atomCount()));
     }
 
-    wgpu::Texture colorTexture_;
-    wgpu::TextureView colorTextureView_;
+    wgpu::raii::Texture colorTexture_;
+    wgpu::raii::TextureView colorTextureView_;
 
     std::unique_ptr<IRenderer> renderer_;
     World world;

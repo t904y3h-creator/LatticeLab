@@ -2,9 +2,10 @@ struct SceneUniforms {
     view       : mat4x4f,
     projection : mat4x4f,
     lightDir   : vec4f,
-    colorMode  : vec4f,
-    maxSpeedSqr: vec4f,
-    maxCount   : vec4f,
+    colorMode  : u32,
+    maxSpeedSqr: f32,
+    maxCount   : u32,
+    _pad       : f32,
     typeColors : array<vec4f, 119>,
 }
 @group(0) @binding(0) var<uniform> uScene: SceneUniforms;

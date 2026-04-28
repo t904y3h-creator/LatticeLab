@@ -4,7 +4,7 @@
 #include <span>
 #include <vector>
 
-#include <webgpu/webgpu.hpp>
+#include <webgpu/webgpu-raii.hpp>
 
 #include "Engine/math/Vec3.h"
 

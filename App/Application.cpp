@@ -17,6 +17,7 @@
 #include "GUI/io/keyboard/Keyboard.h"
 #include "GUI/io/manager/EventManager.h"
 #include "Rendering/2d/Renderer2DWGPU.h"
+#include "Rendering/RendererWGPU.h"
 #include "capture/CaptureActions.h"
 #include "capture/CaptureController.h"
 #include "debug/CreateDebugPanels.h"
@@ -39,7 +40,7 @@ int Application::run() {
 
     // инициализация систем
     World world(Vec3f(50, 50, 6), 0);
-    Scenes::crystal(world, 400, AtomData::Type::Z, false);
+    Scenes::crystal(world, 100, AtomData::Type::Z, false);
 
     Simulation simulation(world);
     CaptureController captureController;
@@ -103,9 +104,6 @@ int Application::run() {
         UiState& uiState = appInterface.state();
         WGPUContext& ctx = WGPUContext::instance();
 
-        static std::array<wgpu::CommandBuffer, 2> submitBatch;
-        uint32_t submitCount = 0;
-
         // Физика
         const double physicsInterval = 1.0 / uiState.simulationSpeed;
         if (physicsAccum >= physicsInterval) {
@@ -114,9 +112,10 @@ int Application::run() {
             if (!uiState.pause) {
                 wgpu::CommandEncoderDescriptor desc;
                 desc.label = wgpu::StringView("PhysicsEncoder");
-                wgpu::CommandEncoder physEnc = ctx.device().createCommandEncoder(desc);
-                simulation.step(physEnc);
-                submitBatch[submitCount++] = physEnc.finish({});
+                wgpu::raii::CommandEncoder physEnc = ctx.device().createCommandEncoder(desc);
+                simulation.step(*physEnc);
+                wgpu::raii::CommandBuffer cmd = physEnc->finish({});
+                ctx.queue().submit(1, &(*cmd));
             }
         }
 
@@ -131,39 +130,29 @@ int Application::run() {
 
             wgpu::SurfaceTexture surfaceTex;
             ctx.surface().getCurrentTexture(&surfaceTex);
-            wgpu::Texture surfaceTexture(surfaceTex.texture);
-            wgpu::TextureView renderTarget = captureController.acquireRenderTarget(surfaceTexture);
+            wgpu::raii::Texture surfaceTexture(surfaceTex.texture);
+            wgpu::raii::TextureView renderTarget = captureController.acquireRenderTarget(*surfaceTexture);
 
             wgpu::CommandEncoderDescriptor desc;
             desc.label = wgpu::StringView("RenderEncoder");
-            wgpu::CommandEncoder renderEnc = ctx.device().createCommandEncoder(desc);
+            wgpu::raii::CommandEncoder renderEnc = ctx.device().createCommandEncoder(desc);
 
-            renderer->drawShot(renderEnc, renderTarget, ctx.depthView(), world);
+            renderer->drawShot(*renderEnc, *renderTarget, ctx.depthView(), world);
             ToolsManager::pickingSystem->getOverlay().draw();
 
             ImGui::Render();
-            auto* wgpuRenderer = static_cast<RendererWGPU*>(renderer.get());
-            ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), wgpuRenderer->getCurrentPass());
-            wgpuRenderer->getCurrentPass().end();
-            wgpuRenderer->getCurrentPass() = nullptr;
+            RendererWGPU* wgpuRenderer = static_cast<RendererWGPU*>(renderer.get());
+            ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), *wgpuRenderer->getCurrentPass());
+            wgpuRenderer->getCurrentPass()->end();
 
-            submitBatch[submitCount++] = renderEnc.finish({});
+            wgpu::raii::CommandBuffer cmd = renderEnc->finish({});
 
-            ctx.queue().submit(submitCount, submitBatch.data());
-            submitCount = 0;
+            ctx.queue().submit(1, &(*cmd));
 
-            captureController.onFrameRendered(surfaceTexture);
+            captureController.onFrameRendered(*surfaceTexture);
             ctx.present();
             ctx.processEvents();
         }
-
-        // физика без рендера в этом кадре
-        if (submitCount > 0) {
-            ctx.queue().submit(submitCount, submitBatch.data());
-            submitCount = 0;
-        }
-
-        submitBatch.fill(nullptr);
 
         Profiler::instance().endFrame();
 

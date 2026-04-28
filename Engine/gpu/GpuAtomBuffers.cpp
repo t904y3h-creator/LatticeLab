@@ -2,11 +2,14 @@
 
 #include <cstring>
 
-#include <webgpu/webgpu.hpp>
+#include <webgpu/webgpu-raii.hpp>
 
 #include "Engine/gpu/WGPUContext.h"
 
 void GpuAtomBuffers::resize(size_t count) {
+    if (countAtoms_ == count) {
+        return;
+    }
     countAtoms_ = count;
 
     const size_t vec4Bytes = count * 4 * sizeof(float);
@@ -56,12 +59,12 @@ void GpuAtomBuffers::downloadRaw(wgpu::Buffer src, size_t byteCount) const {
     desc.size = byteCount;
     desc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead;
     desc.mappedAtCreation = false;
-    wgpu::Buffer staging = WGPUContext::instance().device().createBuffer(desc);
+    wgpu::raii::Buffer staging = WGPUContext::instance().device().createBuffer(desc);
 
-    wgpu::CommandEncoder encoder = WGPUContext::instance().device().createCommandEncoder();
-    encoder.copyBufferToBuffer(src, 0, staging, 0, byteCount);
-    wgpu::CommandBuffer cmd = encoder.finish();
-    WGPUContext::instance().queue().submit(1, &cmd);
+    wgpu::raii::CommandEncoder encoder = WGPUContext::instance().device().createCommandEncoder();
+    encoder->copyBufferToBuffer(src, 0, *staging, 0, byteCount);
+    wgpu::raii::CommandBuffer cmd = encoder->finish();
+    WGPUContext::instance().queue().submit(1, &(*cmd));
 
     bool done = false;
     wgpu::BufferMapCallbackInfo callbackInfo{};
@@ -69,16 +72,16 @@ void GpuAtomBuffers::downloadRaw(wgpu::Buffer src, size_t byteCount) const {
     callbackInfo.callback = [](WGPUMapAsyncStatus, WGPUStringView, void* userdata1, void*) { *static_cast<bool*>(userdata1) = true; };
     callbackInfo.userdata1 = &done;
 
-    staging.mapAsync(wgpu::MapMode::Read, 0, byteCount, callbackInfo);
+    staging->mapAsync(wgpu::MapMode::Read, 0, byteCount, callbackInfo);
 
     while (!done) {
         WGPUContext::instance().processEvents();
     }
 
-    const void* mapped = staging.getConstMappedRange(0, byteCount);
+    const void* mapped = staging->getConstMappedRange(0, byteCount);
     std::memcpy(tmpBuf_.data(), mapped, byteCount);
-    staging.unmap();
-    staging.destroy();
+    staging->unmap();
+    staging->destroy();
 }
 
 void GpuAtomBuffers::downloadVec3(wgpu::Buffer buf, std::span<Vec3f> data) const {

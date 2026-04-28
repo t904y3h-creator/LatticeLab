@@ -10,7 +10,7 @@
 #include <string_view>
 #include <vector>
 
-#include <webgpu/webgpu.hpp>
+#include <webgpu/webgpu-raii.hpp>
 #include <zstd.h>
 
 #include "App/save_system/AppSaveState.h"
@@ -258,10 +258,10 @@ std::vector<IOPanelSceneTile> loadIOPanelSceneTiles(std::string_view scenesDirec
             texDesc.mipLevelCount = 1;
             texDesc.sampleCount = 1;
             texDesc.dimension = wgpu::TextureDimension::_2D;
-            auto texture = device.createTexture(texDesc);
+            wgpu::raii::Texture texture = device.createTexture(texDesc);
 
             wgpu::TexelCopyTextureInfo dst{};
-            dst.texture = texture;
+            dst.texture = *texture;
             dst.mipLevel = 0;
             dst.aspect = wgpu::TextureAspect::All;
 
@@ -273,7 +273,7 @@ std::vector<IOPanelSceneTile> loadIOPanelSceneTiles(std::string_view scenesDirec
             device.getQueue().writeTexture(dst, parsed.imageBytes.data(), parsed.imageBytes.size(), layout, extent);
 
             tile.previewTexture = texture;
-            tile.previewTextureView = texture.createView();
+            tile.previewTextureView = texture->createView();
             tile.previewSize = Vec2u(parsed.imageWidth, parsed.imageHeight);
             tile.hasPreview = true;
         }

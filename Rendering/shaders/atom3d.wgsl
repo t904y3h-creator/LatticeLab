@@ -2,9 +2,10 @@ struct SceneUniforms {
     view       : mat4x4f,
     projection : mat4x4f,
     lightDir   : vec4f,
-    colorMode  : vec4f,
-    maxSpeedSqr: vec4f,
-    maxCount   : vec4f,
+    colorMode  : u32,
+    maxSpeedSqr: f32,
+    maxCount   : u32,
+    _pad       : f32,
     typeColors : array<vec4f, 119>,
 }
 @group(0) @binding(0) var<uniform>       uScene  : SceneUniforms;
@@ -12,13 +13,13 @@ struct SceneUniforms {
 @group(0) @binding(2) var<storage, read> sVel    : array<vec4f>;
 @group(0) @binding(3) var<storage, read> sType   : array<f32>;
 @group(0) @binding(4) var<storage, read> sRadius : array<f32>;
-@group(0) @binding(5) var<storage, read> sSel    : array<f32>;
+@group(0) @binding(5) var<storage, read> sSel    : array<u32>;
 
 struct VertOut {
     @builtin(position) pos    : vec4f,
     @location(0)       uv     : vec2f,
     @location(1)       color  : vec3f,
-    @location(2)       sel    : f32,
+    @location(2)       sel    : u32,
 }
 
 fn turboColor(t: f32) -> vec3f {
@@ -54,18 +55,16 @@ fn vs_main(
                  + right * quadPos.x * r
                  + up    * quadPos.y * r;
 
-    let mode = u32(uScene.colorMode.x);
     var color: vec3f;
-
-    if (mode == 0u) {
+    if (uScene.colorMode == 0u) {
         let t = u32(sType[iid]);
         color = uScene.typeColors[t].rgb;
     }
     else {
         let v = sVel[iid];
         let speedSqr = v.x*v.x + v.y*v.y + v.z*v.z;
-        let t = clamp(speedSqr / uScene.maxSpeedSqr.x, 0.0, 1.0);
-        if (mode == 1u) {
+        let t = clamp(speedSqr / uScene.maxSpeedSqr, 0.0, 1.0);
+        if (uScene.colorMode == 1u) {
             color = vec3f(t, 0.0, 1.0 - t);
         }
         else {
@@ -73,12 +72,12 @@ fn vs_main(
         }
     }
 
-    var out: VertOut;
-    out.pos = uScene.projection * uScene.view * vec4f(worldPos, 1.0);
-    out.uv     = quadPos; 
-    out.color  = color;
-    out.sel    = sSel[iid];
-    return out;
+    return VertOut(
+        uScene.projection * uScene.view * vec4f(worldPos, 1.0);
+        quadPos; 
+        color;
+        sSel[iid]
+    );
 }
 
 @fragment
@@ -94,7 +93,7 @@ fn fs_main(in: VertOut) -> @location(0) vec4f {
     let diff  = max(dot(n, light), 0.0);
     color = vec3f(color.rgb * (0.3 + 0.7 * diff));
 
-    if (in.sel > 0.5) {
+    if (in.sel != 0) {
         color = mix(color, vec3f(1.0, 0.85, 0.0), 0.5);
     }
 
