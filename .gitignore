@@ -15,6 +15,7 @@ captures
 *.exe
 *.dll
 *.so
+*.pdb
 
 # CLion / JetBrains
 .idea/
@@ -36,3 +37,4 @@ __pycache__/
 
 # user settings
 user_settings.cfg
+.cache/
