@@ -141,9 +141,6 @@ if(ENABLE_IPO)
 endif()
 
 add_executable(${APP_NAME} main.cpp)
-set_target_properties(${APP_NAME} PROPERTIES
-    WIN32_EXECUTABLE $<BOOL:${WIN32}>
-)
 
 if(ENABLE_IPO AND lto_supported AND NOT MINGW)
     enable_non_debug_ipo(${APP_NAME})
