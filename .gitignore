@@ -1,8 +1,11 @@
-# Build directories
+# Directories
 /build/
 /build-*/
 /Debug/
 /Release/
+
+# Obsidian
+**/.obsidian/
 
 # Binaries and libraries
 /bin2c
@@ -37,4 +40,3 @@ __pycache__/
 
 # user settings
 user_settings.cfg
-.cache/
