@@ -1,11 +1,13 @@
 #include "World.h"
 
-#include "Engine/metrics/EnergyMetrics.h"
-#include "Engine/physics/Integrator.h"
+#include "Lattice/Engine/metrics/EnergyMetrics.h"
+#include "Lattice/Engine/physics/BondOps.h"
+#include "Lattice/Engine/physics/IIntegrator.h"
 
 World::World(glm::vec3 size, glm::vec3 renderOffset) : size(size), renderOffset(renderOffset), grid(size), vectorField_(glm::ivec3(size), 0) {
     atomStorage_.reserve(250000);
     neighborList_.setParams(5.f, 1.f);
+    state_.forceField_.setForceField("classic_md");
 }
 
 void World::clear() {
@@ -30,13 +32,13 @@ void World::resizeBox(const glm::vec3& newSize, float cellSize) {
 }
 
 void World::addAtom(const glm::vec3& start_coords, const glm::vec3& start_speed, AtomData::Type type, bool fixed) {
-    atomStorage_.addAtom(start_coords, start_speed, type, fixed);
+    (void)atomStorage_.addAtom(start_coords, start_speed, type, fixed);
     grid.rebuild(atomStorage_.xDataSpan(), atomStorage_.yDataSpan(), atomStorage_.zDataSpan());
     invalidateMetrics();
     invalidateVectorField();
 }
 
-void World::addBond(size_t aIndex, size_t bIndex) { Bond::CreateBond(bonds_, aIndex, bIndex, atomStorage_); }
+void World::addBond(size_t aIndex, size_t bIndex) { BondOps::create(bonds_, aIndex, bIndex, atomStorage_); }
 
 void World::remapAtomIndices(std::span<const uint32_t> oldToNew) {
     if (oldToNew.empty()) {
@@ -54,38 +56,53 @@ void World::remapAtomIndices(std::span<const uint32_t> oldToNew) {
 }
 
 void World::removeAtom(size_t atomIndex) {
-    if (atomIndex >= atomStorage_.size()) {
+    removeAtoms({atomIndex});
+}
+
+void World::removeAtoms(std::vector<size_t> atomIndices) {
+    if (atomIndices.empty()) {
         return;
     }
 
-    const size_t lastIndex = atomStorage_.size() - 1;
+    std::sort(atomIndices.begin(), atomIndices.end());
+    atomIndices.erase(std::unique(atomIndices.begin(), atomIndices.end()), atomIndices.end());
 
-    for (auto it = bonds_.begin(); it != bonds_.end();) {
-        if (it->aIndex == atomIndex || it->bIndex == atomIndex) {
-            if (it->aIndex == atomIndex && it->bIndex != atomIndex && it->bIndex < atomStorage_.size()) {
-                ++atomStorage_.valenceCount(it->bIndex);
-            }
-            if (it->bIndex == atomIndex && it->aIndex != atomIndex && it->aIndex < atomStorage_.size()) {
-                ++atomStorage_.valenceCount(it->aIndex);
-            }
-            it = bonds_.erase(it);
+    for (auto itIndex = atomIndices.rbegin(); itIndex != atomIndices.rend(); ++itIndex) {
+        const size_t atomIndex = *itIndex;
+        if (atomIndex >= atomStorage_.size()) {
             continue;
         }
 
-        if (atomIndex != lastIndex) {
-            if (it->aIndex == lastIndex) {
-                it->aIndex = atomIndex;
+        const size_t lastIndex = atomStorage_.size() - 1;
+
+        for (auto it = bonds_.begin(); it != bonds_.end();) {
+            if (it->aIndex == atomIndex || it->bIndex == atomIndex) {
+                if (it->aIndex == atomIndex && it->bIndex != atomIndex && it->bIndex < atomStorage_.size()) {
+                    ++atomStorage_.valenceCount(it->bIndex);
+                }
+                if (it->bIndex == atomIndex && it->aIndex != atomIndex && it->aIndex < atomStorage_.size()) {
+                    ++atomStorage_.valenceCount(it->aIndex);
+                }
+                it = bonds_.erase(it);
+                continue;
             }
-            if (it->bIndex == lastIndex) {
-                it->bIndex = atomIndex;
+
+            if (atomIndex != lastIndex) {
+                if (it->aIndex == lastIndex) {
+                    it->aIndex = atomIndex;
+                }
+                if (it->bIndex == lastIndex) {
+                    it->bIndex = atomIndex;
+                }
             }
+
+            ++it;
         }
 
-        ++it;
+        atomStorage_.removeAtom(atomIndex);
     }
-
-    atomStorage_.removeAtom(atomIndex);
     grid.rebuild(atomStorage_.xDataSpan(), atomStorage_.yDataSpan(), atomStorage_.zDataSpan());
+    neighborList_.clear();
     invalidateMetrics();
     invalidateVectorField();
 }
@@ -114,18 +131,18 @@ void World::update() {
     }
 
     // Создать данные для шага
-    StepData stepData{
+    StepContext stepContext{
         .world = *this,
         .forceField = state_.forceField_,
         .neighborList = neighborList_,
+        .thermostat = state_.thermostat.activeThermostat(),
         .allowBondFormation = state_.bondFormationEnabled_,
         .bondsChanged = false,
-        .accelDamping = state_.integrator.accelDamping(),
         .dt = state_.Dt,
     };
 
     // Выполнить шаг интеграции
-    state_.integrator.step(stepData);
+    state_.integrator.step(stepContext);
 
     // Обновить счётчики и время
     state_.metricsCacheValid_ = false;
@@ -139,6 +156,6 @@ void World::updateVectorField() {
         return;
     }
 
-    vectorField_.compute(state_.forceField_, atomStorage_, grid);
+    vectorField_.compute(state_.forceField_.activeForceField(), atomStorage_, grid);
     vectorFieldDirty_ = false;
 }

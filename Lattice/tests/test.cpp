@@ -1,15 +1,20 @@
 #include <cassert>
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <vector>
 
 #include <glm/vec3.hpp>
 
+#include "Engine/Simulation.h"
+#include "Engine/io/MoleculePdb.h"
 #include "Engine/NeighborSearch/BarnesHut/Octree.h"
 #include "Engine/NeighborSearch/SpatialGrid.h"
 #include "Engine/physics/Atom/AtomSort.h"
 #include "Engine/physics/Atom/AtomStorage.h"
-#include "Engine/physics/ForceFields/CoulombForceField.h"
+#include "Lattice/Plugins/ClassicMD/ForceFields/CoulombForceField.h"
+#include "Lattice/Plugins/ClassicMD/ClassicMDPlugin.h"
+#include "Scripting/LuaState.h"
 
 struct OctreeTestSupport {
     static float charge(const OctreeNode& node) { return node.charge; }
@@ -158,9 +163,263 @@ static void testCoulombFarFieldApproximation() {
     expect(isClose(potentialEnergy, expectedPotential, 1e-5f), "Far-field potential should match monopole approximation");
 }
 
+static float bondDistance(const Lattice::Simulation& simulation, const Bond& bond) {
+    const glm::vec3 a = simulation.atoms().pos(bond.aIndex);
+    const glm::vec3 b = simulation.atoms().pos(bond.bIndex);
+    return glm::length(a - b);
+}
+
+static void testSpawnWaterMoleculeCreatesLocalAtoms() {
+    Lattice::Simulation simulation;
+    simulation.createWorld(glm::vec3(20.0f, 20.0f, 20.0f));
+
+    const std::filesystem::path waterPath = std::filesystem::path("Mods") / "Base" / "Molecules" / "h2o.pdb";
+    expect(simulation.loadMoleculeTemplate("h2o", waterPath), "Water template should load");
+
+    expect(simulation.spawnMolecule("h2o", glm::vec3(10.0f, 10.0f, 10.0f), glm::mat3(1.0f), false), "Direct water spawn should succeed");
+    expect(std::ranges::distance(simulation.bonds()) == 2, "Direct water spawn should create two bonds");
+
+    for (const Bond& bond : simulation.bonds()) {
+        expect(bondDistance(simulation, bond) < 2.0f, "Directly spawned water bond should stay short");
+    }
+}
+
+static void testSpawnNitrogenMoleculeCreatesStableBond() {
+    Lattice::Simulation simulation;
+    simulation.createWorld(glm::vec3(20.0f, 20.0f, 20.0f));
+
+    const std::filesystem::path nitrogenPath = std::filesystem::path("Mods") / "Base" / "Molecules" / "n2.pdb";
+    expect(simulation.loadMoleculeTemplate("n2", nitrogenPath), "Nitrogen template should load");
+
+    expect(simulation.spawnMolecule("n2", glm::vec3(10.0f, 10.0f, 10.0f), glm::mat3(1.0f), false), "Direct nitrogen spawn should succeed");
+    expect(std::ranges::distance(simulation.bonds()) == 1, "Direct nitrogen spawn should create one bond");
+
+    for (const Bond& bond : simulation.bonds()) {
+        expect(bondDistance(simulation, bond) < 1.5f, "Directly spawned nitrogen bond should stay short");
+    }
+}
+
+static void testSpawnAdditionalDiatomicMoleculesCreateStableBond() {
+    constexpr std::array<std::string_view, 7> kMolecules = {
+        "cl2",
+        "f2",
+        "br2",
+        "hf",
+        "hcl",
+        "co",
+        "no",
+    };
+
+    for (std::string_view moleculeName : kMolecules) {
+        Lattice::Simulation simulation;
+        simulation.createWorld(glm::vec3(20.0f, 20.0f, 20.0f));
+
+        const std::filesystem::path moleculePath = std::filesystem::path("Mods") / "Base" / "Molecules" / (std::string(moleculeName) + ".pdb");
+        expect(simulation.loadMoleculeTemplate(std::string(moleculeName), moleculePath), "Molecule template should load");
+
+        expect(simulation.spawnMolecule(std::string(moleculeName), glm::vec3(10.0f, 10.0f, 10.0f), glm::mat3(1.0f), false),
+               "Direct diatomic spawn should succeed");
+        expect(std::ranges::distance(simulation.bonds()) == 1, "Direct diatomic spawn should create one bond");
+
+        for (const Bond& bond : simulation.bonds()) {
+            expect(bondDistance(simulation, bond) < 3.0f, "Directly spawned diatomic bond should stay short");
+        }
+    }
+}
+
+static void testCheckedMoleculeSpawnRejectsBlockedPoint() {
+    Lattice::Simulation simulation;
+    simulation.createWorld(glm::vec3(20.0f, 20.0f, 20.0f));
+
+    const std::filesystem::path waterPath = std::filesystem::path("Mods") / "Base" / "Molecules" / "h2o.pdb";
+    expect(simulation.loadMoleculeTemplate("h2o", waterPath), "Water template should load");
+
+    simulation.createAtom(glm::vec3(10.0f, 10.0f, 10.0f), glm::vec3(0.0f), AtomData::Type::O, false);
+    const size_t atomCountBefore = simulation.atoms().size();
+
+    expect(!simulation.canSpawnMolecule("h2o", glm::vec3(10.0f, 10.0f, 10.0f), glm::mat3(1.0f)),
+           "Water molecule should not fit into an occupied spawn point");
+    expect(!simulation.spawnMoleculeChecked("h2o", glm::vec3(10.0f, 10.0f, 10.0f), glm::mat3(1.0f), false),
+           "Checked water spawn should fail for an occupied point");
+    expect(simulation.atoms().size() == atomCountBefore, "Failed checked spawn should not add atoms");
+}
+
+static void testWaterMoleculeBondsStayLocalAfterNeighborSort() {
+    Lattice::Simulation simulation;
+    simulation.createWorld(glm::vec3(40.0f, 40.0f, 40.0f));
+
+    const std::filesystem::path waterPath = std::filesystem::path("Mods") / "Base" / "Molecules" / "h2o.pdb";
+    expect(simulation.loadMoleculeTemplate("h2o", waterPath), "Water template should load");
+
+    Lattice::SpawnOptions options;
+    options.min = glm::vec3(0.0f);
+    options.max = glm::vec3(40.0f, 40.0f, 40.0f);
+    options.margin = 6.0f;
+    options.minDistance = 4.0f;
+    options.maxAttempts = 128;
+    options.randomRotation = true;
+
+    const int moleculeCount = 20;
+    for (int i = 0; i < moleculeCount; ++i) {
+        expect(simulation.randomSpawn("h2o", options), "Each spawned water molecule should succeed");
+    }
+
+    expect(std::ranges::distance(simulation.bonds()) == moleculeCount * 2, "Each water molecule should contribute exactly two bonds");
+
+    for (const Bond& bond : simulation.bonds()) {
+        expect(bondDistance(simulation, bond) < 2.0f, "Freshly spawned water bond should stay short");
+    }
+
+    simulation.neighborList().rebuildPipeline(simulation.atoms(), simulation.world(), 0);
+
+    for (const Bond& bond : simulation.bonds()) {
+        expect(bondDistance(simulation, bond) < 2.0f, "Water bond should stay short after atom sorting/remap");
+    }
+}
+
+static void testLuaSceneObjectLoadsMoleculesDirectory() {
+    Lattice::Simulation simulation;
+    simulation.createWorld(glm::vec3(20.0f, 20.0f, 20.0f));
+
+    Lattice::LuaState luaState;
+    expect(luaState.valid(), "Lua state should be created");
+    luaState.bindSimulation(simulation);
+
+    const bool ok = luaState.runString(R"(
+        local count, names = scene:load_molecules("Mods/Base/Molecules")
+        assert(count >= 2)
+        assert(#names >= 2)
+        assert(atoms.H == "H")
+        assert(molecule.h2o == "h2o")
+    )");
+    expect(ok, luaState.lastError());
+}
+
+static void testLuaDslSimulationWorldGasBuildsScene() {
+    Lattice::Simulation simulation;
+    simulation.createWorld(glm::vec3(20.0f, 20.0f, 20.0f));
+
+    Lattice::LuaState luaState;
+    expect(luaState.valid(), "Lua state should be created");
+    luaState.bindSimulation(simulation);
+
+    const bool ok = luaState.runString(R"(
+        dofile("Mods/Base/API/base.lua")
+
+        simulation {
+            world {
+                name = "gas_mix",
+                size = { 40, 40, 40 },
+                content = {
+                    load_molecules {
+                        path = "Mods/Base/Molecules",
+                    },
+                    random_fill {
+                        density = 0.01,
+                        region = box {
+                            size = fullworld - 4,
+                            center = center,
+                        },
+                        composition = {
+                            { name = molecule.h2o, fraction = 1.0 },
+                        }
+                    }
+                }
+            }
+        }
+    )");
+    expect(ok, luaState.lastError());
+    expect(simulation.worldTitle() == "gas_mix", "DSL world name should become world title");
+    expect(simulation.atoms().size() > 0, "DSL gas world should spawn atoms");
+}
+
+static void testLuaDslSimulationWorldLatticeBuildsScene() {
+    Lattice::Simulation simulation;
+    simulation.createWorld(glm::vec3(60.0f, 60.0f, 60.0f));
+
+    Lattice::LuaState luaState;
+    expect(luaState.valid(), "Lua state should be created");
+    luaState.bindSimulation(simulation);
+
+    const bool ok = luaState.runString(R"(
+        dofile("Mods/Base/API/base.lua")
+        local spacing = scene:lj_min(atom.C, atom.C)
+
+        simulation {
+            world {
+                name = "hex_lattice",
+                size = { 60, 60, 60 },
+                content = {
+                    lattice_fill {
+                        structure = "bcc",
+                        region = box {
+                            size = { spacing * 3 + 0.1, spacing * 3 + 0.1, spacing * 2 + 0.1 },
+                            center = center,
+                        },
+                        margin = 0.0,
+                        composition = {
+                            { name = atom.C, fraction = 1.0 },
+                        }
+                    }
+                }
+            }
+        }
+    )");
+    expect(ok, luaState.lastError());
+    expect(simulation.worldTitle() == "hex_lattice", "DSL lattice world name should become world title");
+    expect(simulation.atoms().size() > 0, "DSL BCC lattice world should spawn atoms");
+}
+
+static void testLuaDslSimulationWorldHexLatticeBuildsScene() {
+    Lattice::Simulation simulation;
+    simulation.createWorld(glm::vec3(60.0f, 60.0f, 60.0f));
+
+    Lattice::LuaState luaState;
+    expect(luaState.valid(), "Lua state should be created");
+    luaState.bindSimulation(simulation);
+
+    const bool ok = luaState.runString(R"(
+        dofile("Mods/Base/API/base.lua")
+        local spacing = scene:lj_min(atom.C, atom.C)
+
+        simulation {
+            world {
+                name = "hex_packing",
+                size = { 60, 60, 60 },
+                content = {
+                    lattice_fill {
+                        structure = "hex",
+                        region = box {
+                            size = { spacing * 3 + 0.1, spacing * 3 + 0.1, spacing * 2 + 0.1 },
+                            center = center,
+                        },
+                        margin = 0.0,
+                        composition = {
+                            { name = atom.C, fraction = 1.0 },
+                        }
+                    }
+                }
+            }
+        }
+    )");
+    expect(ok, luaState.lastError());
+    expect(simulation.worldTitle() == "hex_packing", "DSL hex lattice world name should become world title");
+    expect(simulation.atoms().size() > 0, "DSL hex lattice world should spawn atoms");
+}
+
 int main() {
+    registerClassicMDPlugin();
     testOctreeBuildChargeAndChildren();
     testCoulombFarFieldApproximation();
+    testSpawnWaterMoleculeCreatesLocalAtoms();
+    testSpawnNitrogenMoleculeCreatesStableBond();
+    testSpawnAdditionalDiatomicMoleculesCreateStableBond();
+    testCheckedMoleculeSpawnRejectsBlockedPoint();
+    testWaterMoleculeBondsStayLocalAfterNeighborSort();
+    testLuaSceneObjectLoadsMoleculesDirectory();
+    testLuaDslSimulationWorldGasBuildsScene();
+    testLuaDslSimulationWorldLatticeBuildsScene();
+    testLuaDslSimulationWorldHexLatticeBuildsScene();
     std::cout << "All Lattice octree/Coulomb tests passed." << std::endl;
     return 0;
 }

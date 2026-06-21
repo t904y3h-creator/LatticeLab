@@ -8,6 +8,7 @@
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include "App/AppPaths.h"
+#include "App/AppSignals.h"
 
 #include "Lattice/Engine/physics/Atom/AtomData.h"
 #include "GUI/interface/panels/io/ioPanelSceneCatalog.h"
@@ -20,44 +21,53 @@ struct UiState;
 
 class IOPanel {
 public:
-    struct MixedGasEntry {
-        AtomData::Type type = AtomData::Type::Z;
-        float concentrationPercent = 50.0f;
-        int absoluteCount = 500;
-    };
-
     enum class RecordingFormat : uint8_t {
         MP4,
         XYZ,
     };
 
     enum class GeneratorKind : uint8_t {
-        Massive,
-        Gas,
-        MixedGas,
-        HexLattice,
         TriangularBipyramid,
+        RandomFill,
+        LatticeFill,
     };
 
     static constexpr ImGuiWindowFlags PANEL_FLAGS =
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_AlwaysVerticalScrollbar;
 
     void draw(float scale, glm::ivec2 windowSize, Lattice::Simulation& simulation, FileDialogManager& fileDialog, UiState& uiState);
+    void drawRegionSpawnPopup(float scale, ImVec2 anchorPos, std::string_view popupId = "##region_spawn_tool_popup");
+    void drawRegionSpawnSettings(float scale, bool compact = false);
     void setScenesDirectory(std::filesystem::path scenesDirectory);
     [[nodiscard]] const std::filesystem::path& scenesDirectory() const { return scenesDirectory_; }
 
-    void toggle() { visible_ = !visible_; }
-    void close() { visible_ = false; }
+    void toggle() {
+        visible_ = !visible_;
+        if (!visible_) {
+            AppSignals::UI::ClearGeneratorPhantom.emit();
+        }
+    }
+    void close() {
+        visible_ = false;
+        AppSignals::UI::ClearGeneratorPhantom.emit();
+    }
     [[nodiscard]] bool isVisible() const { return visible_; }
-    [[nodiscard]] int sceneAxisCount() const { return generatorAxisCounts_.x; }
-    [[nodiscard]] bool sceneIs3D() const { return generatorIs3D_; }
-    [[nodiscard]] int gasAtomCount() const { return generatorAtomCount_; }
-    [[nodiscard]] bool gasIs3D() const { return generatorIs3D_; }
-    [[nodiscard]] AtomData::Type atomType() const { return atomType_; }
-    [[nodiscard]] AtomData::Type gasAtomType() const { return gasAtomType_; }
-    [[nodiscard]] float gasDensity() const { return generatorDensity_; }
+    [[nodiscard]] bool canSpawnFromRegionTool() const;
+    bool emitSpawnFromRegion(const AppSignals::UI::GeneratorRegionSpec& region) const;
+    bool emitSpawnFromRegion(const AppSignals::UI::GeneratorRegionSpec& region, std::string_view species) const;
 
 private:
+    void drawRandomFillGeneratorEditor(float scale, const std::vector<std::string>& availableMolecules,
+                                       AppSignals::UI::GeneratorRegionSpec* regionOverride,
+                                       std::vector<AppSignals::UI::GeneratorComposeSpec>& composition,
+                                       Generators::RandomFillOptions& options, bool showRegionEditor, bool showCreateButton,
+                                       bool compact = false);
+    void drawLatticeFillGeneratorEditor(float scale, const std::vector<std::string>& availableMolecules,
+                                        AppSignals::UI::GeneratorRegionSpec* regionOverride,
+                                        std::vector<AppSignals::UI::GeneratorComposeSpec>& composition,
+                                        Generators::LatticeFillOptions& options, bool showRegionEditor, bool showCreateButton,
+                                        bool compact = false);
     void ensureSceneCatalogLoaded();
     void clearPendingDeleteState();
     void removeSceneTileByPath(std::string_view path);
@@ -65,25 +75,49 @@ private:
     uint8_t pendingReloadFrames_ = 0;
     bool visible_ = false;
     bool sceneCatalogLoaded_ = false;
+    bool generatorsExpanded_ = true;
     float animProgress_ = 0.f;
-    glm::ivec3 generatorAxisCounts_ = glm::ivec3(25, 25, 25);
     int generatorAxisCount_ = 25;
-    bool massiveSeparateAxes_ = true;
-    bool hexSeparateAxes_ = true;
-    int generatorAtomCount_ = 1000;
-    bool generatorIs3D_ = true;
-    float generatorDensity_ = 0.01f;
-    int mixedGasLastTotalCount_ = 1000;
-    GeneratorKind generatorKind_ = GeneratorKind::Massive;
+    GeneratorKind generatorKind_ = GeneratorKind::TriangularBipyramid;
 
-    AtomData::Type atomType_ = AtomData::Type::Z;
-    AtomData::Type gasAtomType_ = AtomData::Type::Z;
-    AtomData::Type icAtomType_ = AtomData::Type::Z;
     AtomData::Type tbpAtomType_ = AtomData::Type::Z;
-    std::vector<MixedGasEntry> mixedGasEntries_ = {
-        {.type = AtomData::Type::Z, .concentrationPercent = 50.0f, .absoluteCount = 500},
-        {.type = AtomData::Type::H, .concentrationPercent = 50.0f, .absoluteCount = 500},
+    AppSignals::UI::GeneratorRegionSpec randomFillRegion_{};
+    AppSignals::UI::GeneratorRegionSpec latticeFillRegion_{};
+    std::vector<AppSignals::UI::GeneratorComposeSpec> randomFillComposition_ = {
+        {.species = "Z", .fraction = 1.0f},
     };
+    std::vector<AppSignals::UI::GeneratorComposeSpec> latticeFillComposition_ = {
+        {.species = "Z", .fraction = 1.0f},
+    };
+    Generators::RandomFillOptions randomFillOptions_{
+        .mode = Generators::SpawnMode::Replace,
+        .density = 0.01f,
+        .temperature = 0.0f,
+        .margin = 2.0f,
+        .maxAttemptsPerSpawn = 32,
+        .randomRotation = true,
+        .fixed = false,
+        .seed = 0,
+    };
+    Generators::LatticeFillOptions latticeFillOptions_{};
+    GeneratorKind regionToolGeneratorKind_ = GeneratorKind::RandomFill;
+    std::vector<AppSignals::UI::GeneratorComposeSpec> regionToolRandomFillComposition_ = {
+        {.species = "Z", .fraction = 1.0f},
+    };
+    std::vector<AppSignals::UI::GeneratorComposeSpec> regionToolLatticeFillComposition_ = {
+        {.species = "Z", .fraction = 1.0f},
+    };
+    Generators::RandomFillOptions regionToolRandomFillOptions_{
+        .mode = Generators::SpawnMode::Replace,
+        .density = 0.01f,
+        .temperature = 0.0f,
+        .margin = 2.0f,
+        .maxAttemptsPerSpawn = 32,
+        .randomRotation = true,
+        .fixed = false,
+        .seed = 0,
+    };
+    Generators::LatticeFillOptions regionToolLatticeFillOptions_{};
     RecordingFormat recordingFormat_ = RecordingFormat::MP4;
     std::filesystem::path scenesDirectory_ = AppPaths::kDefaultScenesDirectory;
     std::vector<IOPanelSceneTile> sceneTiles_;

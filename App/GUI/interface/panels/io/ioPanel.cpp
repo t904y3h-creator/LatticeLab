@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cfloat>
+#include <climits>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -14,180 +15,171 @@
 #include "GUI/interface/UiState.h"
 #include "GUI/interface/file_dialog/FileDialogManager.h"
 #include "GUI/interface/panels/io/ioPanelWidgets.h"
+#include "GUI/interface/style/ComboStyle.h"
 
 namespace {
     constexpr float kSceneTileRounding = 10.0f;
     constexpr int kRecordingFormatVideo = static_cast<int>(IOPanel::RecordingFormat::MP4);
     constexpr int kRecordingFormatXYZ = static_cast<int>(IOPanel::RecordingFormat::XYZ);
-    constexpr float kGasDensity3DMin = 0.001f;
-    constexpr float kGasDensity3DMax = 0.010f;
-    constexpr float kGasDensity2DMin = 0.005f;
-    constexpr float kGasDensity2DMax = 0.060f;
+    constexpr float kCompactPopupWidth = 224.0f;
+    constexpr float kCompactFieldWidth = 126.0f;
+    const std::filesystem::path kBaseMoleculesDirectory = std::filesystem::path("Mods") / "Base" / "Molecules";
 
     const char* generatorLabel(IOPanel::GeneratorKind kind) {
         switch (kind) {
-        case IOPanel::GeneratorKind::Massive:
-            return "Massive crystal";
-        case IOPanel::GeneratorKind::Gas:
-            return "Random gas";
-        case IOPanel::GeneratorKind::MixedGas:
-            return "Mixed gas";
-        case IOPanel::GeneratorKind::HexLattice:
-            return "Hex lattice";
         case IOPanel::GeneratorKind::TriangularBipyramid:
             return "Triangular bipyramid";
+        case IOPanel::GeneratorKind::RandomFill:
+            return "Random fill";
+        case IOPanel::GeneratorKind::LatticeFill:
+            return "Lattice fill";
         }
-        return "Massive crystal";
+        return "Triangular bipyramid";
     }
 
-    void syncMixedGasCountsFromPercents(std::vector<IOPanel::MixedGasEntry>& entries, int totalCount) {
-        for (IOPanel::MixedGasEntry& entry : entries) {
-            entry.concentrationPercent = std::clamp(entry.concentrationPercent, 0.0f, 100.0f);
-            entry.absoluteCount = totalCount > 0 ? static_cast<int>(std::round(static_cast<float>(totalCount) * entry.concentrationPercent / 100.0f)) : 0;
+    const char* regionLabel(AppSignals::UI::GeneratorRegionKind kind) {
+        switch (kind) {
+        case AppSignals::UI::GeneratorRegionKind::Box:
+            return "Box";
+        case AppSignals::UI::GeneratorRegionKind::Sphere:
+            return "Sphere";
+        case AppSignals::UI::GeneratorRegionKind::Cylinder:
+            return "Cylinder";
+        case AppSignals::UI::GeneratorRegionKind::Capsule:
+            return "Capsule";
+        case AppSignals::UI::GeneratorRegionKind::Torus:
+            return "Torus";
+        case AppSignals::UI::GeneratorRegionKind::TrianglePyramid:
+            return "Triangle pyramid";
+        case AppSignals::UI::GeneratorRegionKind::TriangleBiPyramid:
+            return "Triangle bipyramid";
         }
+        return "Box";
     }
 
-    void syncMixedGasPercentsFromCounts(std::vector<IOPanel::MixedGasEntry>& entries, int totalCount) {
-        for (IOPanel::MixedGasEntry& entry : entries) {
-            entry.absoluteCount = std::max(entry.absoluteCount, 0);
-            entry.concentrationPercent = totalCount > 0 ? (100.0f * static_cast<float>(entry.absoluteCount) / static_cast<float>(totalCount)) : 0.0f;
+    const char* latticeStructureLabel(Generators::LatticeStructure structure) {
+        switch (structure) {
+        case Generators::LatticeStructure::Bcc:
+            return "BCC";
+        case Generators::LatticeStructure::Hex:
+            return "HEX";
         }
+        return "BCC";
     }
 
-    void rebalanceMixedGasCounts(std::vector<IOPanel::MixedGasEntry>& entries, int totalCount, size_t lockedIndex) {
-        if (entries.empty()) {
-            return;
+    const char* spawnModeLabel(Generators::SpawnMode mode) {
+        switch (mode) {
+        case Generators::SpawnMode::Reset:
+            return "Reset";
+        case Generators::SpawnMode::Add:
+            return "Add";
+        case Generators::SpawnMode::Replace:
+            return "Replace";
+        }
+        return "Replace";
+    }
+
+    std::string speciesLabel(std::string_view species) {
+        if (species == "Z") {
+            return "Zerium";
+        }
+        return std::string(species);
+    }
+
+    std::vector<std::string> listAvailableMolecules() {
+        std::vector<std::string> moleculeNames;
+        if (!std::filesystem::exists(kBaseMoleculesDirectory) || !std::filesystem::is_directory(kBaseMoleculesDirectory)) {
+            return moleculeNames;
         }
 
-        totalCount = std::max(totalCount, 0);
-        if (lockedIndex >= entries.size()) {
-            lockedIndex = entries.size() - 1;
-        }
-
-        entries[lockedIndex].absoluteCount = std::clamp(entries[lockedIndex].absoluteCount, 0, totalCount);
-        const int lockedCount = entries[lockedIndex].absoluteCount;
-        const int remainingTotal = std::max(0, totalCount - lockedCount);
-
-        std::vector<size_t> otherIndices;
-        otherIndices.reserve(entries.size() > 0 ? entries.size() - 1 : 0);
-        int otherWeightSum = 0;
-        for (size_t i = 0; i < entries.size(); ++i) {
-            if (i == lockedIndex) {
+        for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(kBaseMoleculesDirectory)) {
+            if (!entry.is_regular_file() || entry.path().extension() != ".pdb") {
                 continue;
             }
-            entries[i].absoluteCount = std::max(entries[i].absoluteCount, 0);
-            otherIndices.push_back(i);
-            otherWeightSum += entries[i].absoluteCount;
+
+            const std::string moleculeName = entry.path().stem().string();
+            if (!moleculeName.empty()) {
+                moleculeNames.push_back(moleculeName);
+            }
         }
 
-        if (!otherIndices.empty()) {
-            std::vector<int> newCounts(otherIndices.size(), 0);
-            int assigned = 0;
+        std::sort(moleculeNames.begin(), moleculeNames.end());
+        moleculeNames.erase(std::unique(moleculeNames.begin(), moleculeNames.end()), moleculeNames.end());
+        return moleculeNames;
+    }
 
-            if (otherWeightSum > 0) {
-                std::vector<float> remainders(otherIndices.size(), 0.0f);
-                for (size_t n = 0; n < otherIndices.size(); ++n) {
-                    const float exact = static_cast<float>(remainingTotal) * static_cast<float>(entries[otherIndices[n]].absoluteCount) /
-                                        static_cast<float>(otherWeightSum);
-                    newCounts[n] = static_cast<int>(std::floor(exact));
-                    remainders[n] = exact - static_cast<float>(newCounts[n]);
-                    assigned += newCounts[n];
-                }
-                while (assigned < remainingTotal) {
-                    size_t bestIndex = 0;
-                    for (size_t n = 1; n < otherIndices.size(); ++n) {
-                        if (remainders[n] > remainders[bestIndex]) {
-                            bestIndex = n;
-                        }
+    void drawSpeciesCombo(const char* id, std::string& species, float width, float scale, const std::vector<std::string>& moleculeNames,
+                          bool allowMolecules) {
+        const std::string previewLabel = speciesLabel(species);
+        if (ComboStyle::beginCombo(id, previewLabel.c_str(), width, scale)) {
+            if (allowMolecules && !moleculeNames.empty()) {
+                ImGui::SeparatorText("Molecules");
+                for (const std::string& moleculeName : moleculeNames) {
+                    const bool selected = (species == moleculeName);
+                    if (ImGui::Selectable(moleculeName.c_str(), selected)) {
+                        species = moleculeName;
                     }
-                    ++newCounts[bestIndex];
-                    remainders[bestIndex] = -1.0f;
-                    ++assigned;
-                }
-            }
-            else {
-                const int base = remainingTotal / static_cast<int>(otherIndices.size());
-                int rest = remainingTotal % static_cast<int>(otherIndices.size());
-                for (size_t n = 0; n < otherIndices.size(); ++n) {
-                    newCounts[n] = base + (rest > 0 ? 1 : 0);
-                    if (rest > 0) {
-                        --rest;
+                    if (selected) {
+                        ImGui::SetItemDefaultFocus();
                     }
                 }
             }
 
-            for (size_t n = 0; n < otherIndices.size(); ++n) {
-                entries[otherIndices[n]].absoluteCount = newCounts[n];
-            }
-        }
-
-        syncMixedGasPercentsFromCounts(entries, totalCount);
-    }
-
-    void normalizeMixedGasToTotal(std::vector<IOPanel::MixedGasEntry>& entries, int totalCount) {
-        if (entries.empty()) {
-            return;
-        }
-
-        totalCount = std::max(totalCount, 0);
-        int sum = 0;
-        for (const IOPanel::MixedGasEntry& entry : entries) {
-            sum += std::max(entry.absoluteCount, 0);
-        }
-
-        if (sum <= 0) {
-            entries.front().absoluteCount = totalCount;
-            for (size_t i = 1; i < entries.size(); ++i) {
-                entries[i].absoluteCount = 0;
-            }
-            syncMixedGasPercentsFromCounts(entries, totalCount);
-            return;
-        }
-
-        std::vector<int> newCounts(entries.size(), 0);
-        std::vector<float> remainders(entries.size(), 0.0f);
-        int assigned = 0;
-        for (size_t i = 0; i < entries.size(); ++i) {
-            const float exact = static_cast<float>(totalCount) * static_cast<float>(std::max(entries[i].absoluteCount, 0)) / static_cast<float>(sum);
-            newCounts[i] = static_cast<int>(std::floor(exact));
-            remainders[i] = exact - static_cast<float>(newCounts[i]);
-            assigned += newCounts[i];
-        }
-        while (assigned < totalCount) {
-            size_t bestIndex = 0;
-            for (size_t i = 1; i < entries.size(); ++i) {
-                if (remainders[i] > remainders[bestIndex]) {
-                    bestIndex = i;
+            ImGui::SeparatorText("Atoms");
+            for (int i = 0; i < static_cast<int>(AtomData::Type::COUNT); ++i) {
+                const AtomData::Type atomType = static_cast<AtomData::Type>(i);
+                const std::string_view symbol = AtomData::symbol(atomType);
+                const std::string candidateLabel = speciesLabel(symbol);
+                const bool selected = (species == symbol);
+                if (ImGui::Selectable(candidateLabel.c_str(), selected)) {
+                    species = std::string(symbol);
+                }
+                if (selected) {
+                    ImGui::SetItemDefaultFocus();
                 }
             }
-            ++newCounts[bestIndex];
-            remainders[bestIndex] = -1.0f;
-            ++assigned;
-        }
 
-        for (size_t i = 0; i < entries.size(); ++i) {
-            entries[i].absoluteCount = newCounts[i];
+            ImGui::EndCombo();
         }
-        syncMixedGasPercentsFromCounts(entries, totalCount);
     }
 
-    int mixedGasAssignedCount(const std::vector<IOPanel::MixedGasEntry>& entries) {
-        int sum = 0;
-        for (const IOPanel::MixedGasEntry& entry : entries) {
-            sum += std::max(entry.absoluteCount, 0);
-        }
-        return sum;
+    bool compactComboRow(const char* label, const char* id, const char* preview, float scale) {
+        ImGui::SetNextItemWidth(kCompactFieldWidth * scale);
+        const bool open = ComboStyle::beginCombo(id, preview, 0.0f, scale);
+        ImGui::SameLine();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label);
+        return open;
     }
 
-    float clampUiGasDensity(float density, bool is3d) {
-        return std::clamp(density, is3d ? kGasDensity3DMin : kGasDensity2DMin, is3d ? kGasDensity3DMax : kGasDensity2DMax);
+    bool compactSliderFloatRow(const char* label, const char* id, float& value, float minValue, float maxValue, const char* format,
+                               ImGuiSliderFlags flags, float scale) {
+        ImGui::SetNextItemWidth(kCompactFieldWidth * scale);
+        const bool changed = ImGui::SliderFloat(id, &value, minValue, maxValue, format, flags);
+        ImGui::SameLine();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label);
+        return changed;
     }
 
-    void drawGasDensitySlider(const char* id, float& density, bool is3d, float scale) {
-        density = clampUiGasDensity(density, is3d);
-        ImGui::SetNextItemWidth(120.0f * scale);
-        ImGui::SliderFloat(id, &density, is3d ? kGasDensity3DMin : kGasDensity2DMin, is3d ? kGasDensity3DMax : kGasDensity2DMax,
-                           is3d ? "%.4f A^-3" : "%.3f A^-2", ImGuiSliderFlags_Logarithmic);
+    bool compactDragFloatRow(const char* label, const char* id, float& value, float speed, float minValue, float maxValue, const char* format,
+                             float scale) {
+        ImGui::SetNextItemWidth(kCompactFieldWidth * scale);
+        const bool changed = ImGui::DragFloat(id, &value, speed, minValue, maxValue, format);
+        ImGui::SameLine();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label);
+        return changed;
+    }
+
+    bool compactDragIntRow(const char* label, const char* id, int& value, float speed, int minValue, int maxValue, const char* format,
+                           float scale) {
+        ImGui::SetNextItemWidth(kCompactFieldWidth * scale);
+        const bool changed = ImGui::DragInt(id, &value, speed, minValue, maxValue, format);
+        ImGui::SameLine();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label);
+        return changed;
     }
 
     void drawAxisCountControls(const char* prefix, glm::ivec3& counts, float scale, int minValue, int maxValue, bool enableZ) {
@@ -206,6 +198,169 @@ namespace {
 
     glm::ivec3 makeUniformAxisCounts(int count, bool enableZ) {
         return glm::ivec3(count, count, enableZ ? count : 1);
+    }
+
+    void rebalanceCompositionFractions(std::vector<AppSignals::UI::GeneratorComposeSpec>& composition, size_t lockedIndex) {
+        if (composition.empty()) {
+            return;
+        }
+
+        if (lockedIndex >= composition.size()) {
+            lockedIndex = composition.size() - 1;
+        }
+
+        composition[lockedIndex].fraction = std::clamp(composition[lockedIndex].fraction, 0.0f, 1.0f);
+        const float lockedFraction = composition[lockedIndex].fraction;
+        const float remainingTotal = std::max(0.0f, 1.0f - lockedFraction);
+
+        std::vector<size_t> otherIndices;
+        otherIndices.reserve(composition.size() > 0 ? composition.size() - 1 : 0);
+        float otherWeightSum = 0.0f;
+        for (size_t i = 0; i < composition.size(); ++i) {
+            if (i == lockedIndex) {
+                continue;
+            }
+            composition[i].fraction = std::max(composition[i].fraction, 0.0f);
+            otherIndices.push_back(i);
+            otherWeightSum += composition[i].fraction;
+        }
+
+        if (otherIndices.empty()) {
+            return;
+        }
+
+        if (otherWeightSum > 0.0f) {
+            for (size_t i : otherIndices) {
+                composition[i].fraction = remainingTotal * (composition[i].fraction / otherWeightSum);
+            }
+            return;
+        }
+
+        const float evenFraction = remainingTotal / static_cast<float>(otherIndices.size());
+        for (size_t i : otherIndices) {
+            composition[i].fraction = evenFraction;
+        }
+    }
+
+    void drawRegionEditor(const char* prefix, AppSignals::UI::GeneratorRegionSpec& region, float scale) {
+        if (ImGui::BeginCombo((std::string("Region##") + prefix).c_str(), regionLabel(region.kind))) {
+            constexpr AppSignals::UI::GeneratorRegionKind regionKinds[] = {
+                AppSignals::UI::GeneratorRegionKind::Box,
+                AppSignals::UI::GeneratorRegionKind::Sphere,
+                AppSignals::UI::GeneratorRegionKind::Cylinder,
+                AppSignals::UI::GeneratorRegionKind::Capsule,
+                AppSignals::UI::GeneratorRegionKind::Torus,
+                AppSignals::UI::GeneratorRegionKind::TrianglePyramid,
+                AppSignals::UI::GeneratorRegionKind::TriangleBiPyramid,
+            };
+
+            for (AppSignals::UI::GeneratorRegionKind kind : regionKinds) {
+                const bool selected = kind == region.kind;
+                if (ImGui::Selectable(regionLabel(kind), selected)) {
+                    region.kind = kind;
+                }
+                if (selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+
+        ImGui::SetNextItemWidth(220.0f * scale);
+        ImGui::DragFloat3((std::string("Center##") + prefix).c_str(), &region.center.x, 0.25f, -10000.0f, 10000.0f, "%.2f");
+
+        switch (region.kind) {
+        case AppSignals::UI::GeneratorRegionKind::Box:
+            ImGui::SetNextItemWidth(220.0f * scale);
+            ImGui::DragFloat3((std::string("Size##") + prefix).c_str(), &region.boxSize.x, 0.25f, 0.0f, 10000.0f, "%.2f");
+            break;
+        case AppSignals::UI::GeneratorRegionKind::Sphere:
+            ImGui::SetNextItemWidth(120.0f * scale);
+            ImGui::DragFloat((std::string("Radius##") + prefix).c_str(), &region.sphereRadius, 0.25f, 0.0f, 10000.0f, "%.2f");
+            break;
+        case AppSignals::UI::GeneratorRegionKind::Cylinder:
+            ImGui::SetNextItemWidth(120.0f * scale);
+            ImGui::DragFloat((std::string("Base radius##") + prefix).c_str(), &region.cylinderRadius, 0.25f, 0.0f, 10000.0f, "%.2f");
+            ImGui::SetNextItemWidth(120.0f * scale);
+            ImGui::DragFloat((std::string("Height##") + prefix).c_str(), &region.cylinderHeight, 0.25f, 0.0f, 10000.0f, "%.2f");
+            break;
+        case AppSignals::UI::GeneratorRegionKind::Capsule:
+            ImGui::SetNextItemWidth(120.0f * scale);
+            ImGui::DragFloat((std::string("Capsule radius##") + prefix).c_str(), &region.capsuleRadius, 0.25f, 0.0f, 10000.0f, "%.2f");
+            ImGui::SetNextItemWidth(120.0f * scale);
+            ImGui::DragFloat((std::string("Capsule height##") + prefix).c_str(), &region.capsuleHeight, 0.25f, 0.0f, 10000.0f, "%.2f");
+            break;
+        case AppSignals::UI::GeneratorRegionKind::Torus:
+            ImGui::SetNextItemWidth(120.0f * scale);
+            ImGui::DragFloat((std::string("Major radius##") + prefix).c_str(), &region.torusMajorRadius, 0.25f, 0.0f, 10000.0f, "%.2f");
+            ImGui::SetNextItemWidth(120.0f * scale);
+            ImGui::DragFloat((std::string("Tube radius##") + prefix).c_str(), &region.torusTubeRadius, 0.25f, 0.0f, 10000.0f, "%.2f");
+            break;
+        case AppSignals::UI::GeneratorRegionKind::TrianglePyramid:
+            ImGui::SetNextItemWidth(120.0f * scale);
+            ImGui::DragFloat((std::string("Base circumradius##") + prefix).c_str(), &region.pyramidBaseCircumradius, 0.25f, 0.0f, 10000.0f,
+                             "%.2f");
+            ImGui::SetNextItemWidth(120.0f * scale);
+            ImGui::DragFloat((std::string("Pyramid height##") + prefix).c_str(), &region.pyramidHeight, 0.25f, 0.0f, 10000.0f, "%.2f");
+            break;
+        case AppSignals::UI::GeneratorRegionKind::TriangleBiPyramid:
+            ImGui::SetNextItemWidth(120.0f * scale);
+            ImGui::DragFloat((std::string("Base circumradius##") + prefix).c_str(), &region.bipyramidBaseCircumradius, 0.25f, 0.0f,
+                             10000.0f, "%.2f");
+            ImGui::SetNextItemWidth(120.0f * scale);
+            ImGui::DragFloat((std::string("Bipyramid height##") + prefix).c_str(), &region.bipyramidHeight, 0.25f, 0.0f, 10000.0f, "%.2f");
+            break;
+        }
+    }
+
+    void drawCompositionEditor(const char* prefix, std::vector<AppSignals::UI::GeneratorComposeSpec>& composition, float scale,
+                               const char* defaultSpecies, const std::vector<std::string>& moleculeNames, bool allowMolecules,
+                               bool compact = false) {
+        const float speciesWidth = std::floor((compact ? 72.0f : 100.0f) * scale);
+        const float fractionWidth = std::floor((compact ? 54.0f : 72.0f) * scale);
+        const float removeWidth = std::floor((compact ? 18.0f : 22.0f) * scale);
+        float totalFraction = 0.0f;
+        for (size_t i = 0; i < composition.size(); ++i) {
+            AppSignals::UI::GeneratorComposeSpec& entry = composition[i];
+            totalFraction += std::max(entry.fraction, 0.0f);
+
+            ImGui::PushID(static_cast<int>(i));
+            drawSpeciesCombo((std::string("##species_") + prefix).c_str(), entry.species, speciesWidth, scale, moleculeNames, allowMolecules);
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(fractionWidth);
+            float percent = std::clamp(entry.fraction, 0.0f, 1.0f) * 100.0f;
+            const bool percentChanged =
+                ImGui::DragFloat((std::string("##fraction_") + prefix).c_str(), &percent, 0.25f, 0.0f, 100.0f, "%.1f%%");
+            if (percentChanged) {
+                entry.fraction = std::clamp(percent / 100.0f, 0.0f, 1.0f);
+                rebalanceCompositionFractions(composition, i);
+            }
+            ImGui::SameLine();
+            ImGui::BeginDisabled(composition.size() <= 1);
+            const bool remove = ImGui::Button((std::string("x##") + prefix).c_str(), ImVec2(removeWidth, 0.0f));
+            ImGui::EndDisabled();
+            ImGui::PopID();
+
+            if (remove) {
+                composition.erase(composition.begin() + static_cast<std::ptrdiff_t>(i));
+                --i;
+            }
+        }
+
+        if (ImGui::Button((std::string("Add type##") + prefix).c_str(), ImVec2((compact ? 86.0f : 140.0f) * scale, 0.0f))) {
+            composition.push_back({
+                .species = defaultSpecies,
+                .fraction = 0.0f,
+            });
+            rebalanceCompositionFractions(composition, composition.size() - 1);
+        }
+
+        totalFraction = 0.0f;
+        for (const AppSignals::UI::GeneratorComposeSpec& entry : composition) {
+            totalFraction += std::max(entry.fraction, 0.0f);
+        }
+        ImGui::SameLine();
+        ImGui::Text("sum %.1f%%", totalFraction * 100.0f);
     }
 }
 
@@ -242,6 +397,165 @@ void IOPanel::removeSceneTileByPath(std::string_view path) {
     }
 }
 
+void IOPanel::drawRandomFillGeneratorEditor(float scale, const std::vector<std::string>& availableMolecules,
+                                            AppSignals::UI::GeneratorRegionSpec* regionOverride,
+                                            std::vector<AppSignals::UI::GeneratorComposeSpec>& composition,
+                                            Generators::RandomFillOptions& options, bool showRegionEditor, bool showCreateButton,
+                                            bool compact) {
+    AppSignals::UI::GeneratorRegionSpec& region = regionOverride != nullptr ? *regionOverride : randomFillRegion_;
+    if (showRegionEditor) {
+        drawRegionEditor(regionOverride != nullptr ? "region_tool_random_fill" : "random_fill_region", region, scale);
+        AppSignals::UI::SetGeneratorPhantom.emit(region);
+    }
+    drawCompositionEditor(regionOverride != nullptr ? "region_tool_random_fill_composition" : "random_fill_composition", composition, scale, "Z",
+                          availableMolecules, true, compact);
+
+    const char* modeId = regionOverride != nullptr ? "##region_tool_random_fill_mode" : "##random_fill_mode";
+    const bool modeOpen = compact ? compactComboRow("Mode", modeId, spawnModeLabel(options.mode), scale)
+                                  : ComboStyle::beginCombo(regionOverride != nullptr ? "Mode##region_tool_random_fill" : "Mode##random_fill",
+                                                           spawnModeLabel(options.mode), 0.0f, scale);
+    if (modeOpen) {
+        constexpr Generators::SpawnMode spawnModes[] = {
+            Generators::SpawnMode::Reset,
+            Generators::SpawnMode::Add,
+            Generators::SpawnMode::Replace,
+        };
+        for (Generators::SpawnMode value : spawnModes) {
+            const bool selected = value == options.mode;
+            if (ImGui::Selectable(spawnModeLabel(value), selected)) {
+                options.mode = value;
+            }
+            if (selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    if (compact) {
+        compactDragFloatRow("Density", "##region_tool_random_fill_density_compact", options.density, 0.001f, 0.0f, 10.0f, "%.4f", scale);
+        compactDragFloatRow("Temp", "##region_tool_random_fill_temperature_compact", options.temperature, 1.0f, 0.0f, 100000.0f, "%.1f",
+                            scale);
+    }
+    else {
+        ImGui::SetNextItemWidth(120.0f * scale);
+        ImGui::DragFloat(regionOverride != nullptr ? "Density##region_tool_random_fill" : "Density##random_fill", &options.density, 0.001f, 0.0f,
+                         10.0f, "%.4f");
+        ImGui::SetNextItemWidth(120.0f * scale);
+        ImGui::DragFloat(regionOverride != nullptr ? "Temperature##region_tool_random_fill" : "Temperature##random_fill", &options.temperature,
+                         1.0f, 0.0f, 100000.0f, "%.1f");
+    }
+
+    if (!compact) {
+        int maxAttemptsPerSpawn = static_cast<int>(options.maxAttemptsPerSpawn);
+        if ((ImGui::SetNextItemWidth(120.0f * scale),
+             ImGui::DragInt(regionOverride != nullptr ? "Attempts##region_tool_random_fill" : "Attempts##random_fill", &maxAttemptsPerSpawn,
+                            1.0f, 1, INT_MAX, "%d"))) {
+            options.maxAttemptsPerSpawn = static_cast<uint32_t>(std::max(maxAttemptsPerSpawn, 1));
+        }
+
+        int seed = static_cast<int>(options.seed);
+        if ((ImGui::SetNextItemWidth(120.0f * scale),
+             ImGui::DragInt(regionOverride != nullptr ? "Seed##region_tool_random_fill" : "Seed##random_fill", &seed, 1.0f, 0, INT_MAX, "%d"))) {
+            options.seed = static_cast<uint32_t>(std::max(seed, 0));
+        }
+    }
+
+    ImGui::Checkbox(regionOverride != nullptr ? "Random rotation##region_tool_random_fill" : "Random rotation##random_fill", &options.randomRotation);
+    ImGui::SameLine();
+    ImGui::Checkbox(regionOverride != nullptr ? "Fixed##region_tool_random_fill" : "Fixed##random_fill", &options.fixed);
+
+    if (showCreateButton) {
+        if (ImGui::Button("Create##random_fill", ImVec2(140.0f * scale, 0.0f))) {
+            AppSignals::UI::RandomFillRequest request;
+            request.region = region;
+            request.composition = composition;
+            request.options = options;
+            AppSignals::UI::CreateRandomFill.emit(request);
+        }
+    }
+}
+
+void IOPanel::drawLatticeFillGeneratorEditor(float scale, const std::vector<std::string>& availableMolecules,
+                                             AppSignals::UI::GeneratorRegionSpec* regionOverride,
+                                             std::vector<AppSignals::UI::GeneratorComposeSpec>& composition,
+                                             Generators::LatticeFillOptions& options, bool showRegionEditor, bool showCreateButton,
+                                             bool compact) {
+    AppSignals::UI::GeneratorRegionSpec& region = regionOverride != nullptr ? *regionOverride : latticeFillRegion_;
+    if (showRegionEditor) {
+        drawRegionEditor(regionOverride != nullptr ? "region_tool_lattice_fill" : "lattice_fill_region", region, scale);
+        AppSignals::UI::SetGeneratorPhantom.emit(region);
+    }
+
+    const char* structureId = regionOverride != nullptr ? "##region_tool_lattice_fill_structure" : "##lattice_fill_structure";
+    const bool structureOpen = compact ? compactComboRow("Type", structureId, latticeStructureLabel(options.structure), scale)
+                                       : ComboStyle::beginCombo(regionOverride != nullptr ? "Structure##region_tool_lattice_fill"
+                                                                                          : "Structure##lattice_fill",
+                                                                latticeStructureLabel(options.structure), 0.0f, scale);
+    if (structureOpen) {
+        constexpr Generators::LatticeStructure structures[] = {
+            Generators::LatticeStructure::Bcc,
+            Generators::LatticeStructure::Hex,
+        };
+        for (Generators::LatticeStructure value : structures) {
+            const bool selected = value == options.structure;
+            if (ImGui::Selectable(latticeStructureLabel(value), selected)) {
+                options.structure = value;
+            }
+            if (selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    drawCompositionEditor(regionOverride != nullptr ? "region_tool_lattice_fill_composition" : "lattice_fill_composition", composition, scale, "Z",
+                          availableMolecules, false, compact);
+
+    const char* modeId = regionOverride != nullptr ? "##region_tool_lattice_fill_mode" : "##lattice_fill_mode";
+    const bool modeOpen = compact ? compactComboRow("Mode", modeId, spawnModeLabel(options.mode), scale)
+                                  : ComboStyle::beginCombo(regionOverride != nullptr ? "Mode##region_tool_lattice_fill"
+                                                                                     : "Mode##lattice_fill",
+                                                           spawnModeLabel(options.mode), 0.0f, scale);
+    if (modeOpen) {
+        constexpr Generators::SpawnMode spawnModes[] = {
+            Generators::SpawnMode::Reset,
+            Generators::SpawnMode::Add,
+            Generators::SpawnMode::Replace,
+        };
+        for (Generators::SpawnMode value : spawnModes) {
+            const bool selected = value == options.mode;
+            if (ImGui::Selectable(spawnModeLabel(value), selected)) {
+                options.mode = value;
+            }
+            if (selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    if (!compact) {
+        int seed = static_cast<int>(options.seed);
+        if ((ImGui::SetNextItemWidth(120.0f * scale),
+             ImGui::DragInt(regionOverride != nullptr ? "Seed##region_tool_lattice_fill" : "Seed##lattice_fill", &seed, 1.0f, 0, INT_MAX,
+                            "%d"))) {
+            options.seed = static_cast<uint32_t>(std::max(seed, 0));
+        }
+    }
+    ImGui::Checkbox(regionOverride != nullptr ? "Fixed##region_tool_lattice_fill" : "Fixed##lattice_fill", &options.fixed);
+
+    if (showCreateButton) {
+        if (ImGui::Button("Create##lattice_fill", ImVec2(140.0f * scale, 0.0f))) {
+            AppSignals::UI::LatticeFillRequest request;
+            request.region = region;
+            request.composition = composition;
+            request.options = options;
+            AppSignals::UI::CreateLatticeFill.emit(request);
+        }
+    }
+}
+
 void IOPanel::draw(float scale, glm::ivec2 windowSize, Lattice::Simulation& simulation, FileDialogManager& fileDialog, UiState& uiState) {
     const float target = visible_ ? 1.f : 0.f;
     const float step = ImGui::GetIO().DeltaTime * 12.f;
@@ -267,6 +581,7 @@ void IOPanel::draw(float scale, glm::ivec2 windowSize, Lattice::Simulation& simu
 
     fileDialog.setSimulationDirectory(scenesDirectory_.string());
     ensureSceneCatalogLoaded();
+    const std::vector<std::string> availableMolecules = listAvailableMolecules();
     const float panelWidth = 300.f * scale;
     const float topOffset = 65.f * scale;
     const float panelHeight = static_cast<float>(windowSize.y) - topOffset;
@@ -323,173 +638,50 @@ void IOPanel::draw(float scale, glm::ivec2 windowSize, Lattice::Simulation& simu
     else if (xyzSelected) {
         drawIOPanelRecordingStatusLine(xyzRecording, uiState.xyzFps, uiState.xyzFrameCount);
     }
-    ImGui::SeparatorText("Генератор");
-    if (ImGui::BeginCombo("##generator_kind", generatorLabel(generatorKind_))) {
-        constexpr IOPanel::GeneratorKind generators[] = {
-            IOPanel::GeneratorKind::Massive,
-            IOPanel::GeneratorKind::Gas,
-            IOPanel::GeneratorKind::MixedGas,
-            IOPanel::GeneratorKind::HexLattice,
-            IOPanel::GeneratorKind::TriangularBipyramid,
-        };
-        for (IOPanel::GeneratorKind kind : generators) {
-            const bool selected = kind == generatorKind_;
-            if (ImGui::Selectable(generatorLabel(kind), selected)) {
-                generatorKind_ = kind;
-            }
-            if (selected) {
-                ImGui::SetItemDefaultFocus();
-            }
-        }
-        ImGui::EndCombo();
+    ImGuiTreeNodeFlags generatorHeaderFlags = generatorsExpanded_ ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None;
+    const bool generatorsOpen = ImGui::CollapsingHeader("Генераторы", generatorHeaderFlags);
+    generatorsExpanded_ = generatorsOpen;
+    if (!generatorsOpen) {
+        AppSignals::UI::ClearGeneratorPhantom.emit();
     }
+    else {
+        if (ImGui::BeginCombo("##generator_kind", generatorLabel(generatorKind_))) {
+            constexpr IOPanel::GeneratorKind generators[] = {
+                IOPanel::GeneratorKind::TriangularBipyramid,
+                IOPanel::GeneratorKind::RandomFill,
+                IOPanel::GeneratorKind::LatticeFill,
+            };
+            for (IOPanel::GeneratorKind kind : generators) {
+                const bool selected = kind == generatorKind_;
+                if (ImGui::Selectable(generatorLabel(kind), selected)) {
+                    generatorKind_ = kind;
+                }
+                if (selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
 
-    bool createRequested = false;
-    if (generatorAtomCount_ != mixedGasLastTotalCount_) {
-        normalizeMixedGasToTotal(mixedGasEntries_, generatorAtomCount_);
-        mixedGasLastTotalCount_ = generatorAtomCount_;
-    }
-    switch (generatorKind_) {
-    case GeneratorKind::Massive:
-        if (!massiveSeparateAxes_) {
-            drawAxisCountControls("massive_axis", generatorAxisCounts_, scale, 2, 200, generatorIs3D_);
-        }
-        else {
-            ImGui::SetNextItemWidth(160.0f * scale);
-            ImGui::SliderInt("Size##atoms_per_axis", &generatorAxisCount_, 2, 200);
-            generatorAxisCounts_ = makeUniformAxisCounts(generatorAxisCount_, generatorIs3D_);
-        }
-        if (massiveSeparateAxes_) {
+        switch (generatorKind_) {
+        case GeneratorKind::TriangularBipyramid:
+            ImGui::SliderInt("##atoms_per_axis_tbp", &generatorAxisCount_, 2, 100);
             ImGui::SameLine();
-        }
-        drawIOPanelAtomTypeCombo("##atom_type", atomType_, 80.f * scale, scale);
-        createRequested = ImGui::Button("Create##massive", ImVec2(buttonWidth * scale, 0.f));
-        if (createRequested) {
-            AppSignals::UI::CreateMassive.emit(generatorAxisCounts_, atomType_, generatorIs3D_);
-        }
-        ImGui::SameLine();
-        ImGui::Checkbox("3D##massive", &generatorIs3D_);
-        ImGui::SameLine();
-        if (ImGui::Checkbox("Scalar##massive", &massiveSeparateAxes_)) {
-            if (!massiveSeparateAxes_) {
-                generatorAxisCounts_ = makeUniformAxisCounts(generatorAxisCount_, generatorIs3D_);
+            drawIOPanelAtomTypeCombo("##atom_type_tbp", tbpAtomType_, 80.f * scale, scale);
+            if (ImGui::Button("Create##tbp", ImVec2(buttonWidth * scale, 0.f))) {
+                AppSignals::UI::CreateTriangularBipyramidCrystal.emit(generatorAxisCount_, tbpAtomType_);
             }
-            else {
-                generatorAxisCount_ = std::max(generatorAxisCounts_.x, 2);
-                generatorAxisCounts_ = makeUniformAxisCounts(generatorAxisCount_, generatorIs3D_);
-            }
+            break;
+        case GeneratorKind::RandomFill:
+            drawRandomFillGeneratorEditor(scale, availableMolecules, nullptr, randomFillComposition_, randomFillOptions_, true, true, false);
+            break;
+        case GeneratorKind::LatticeFill:
+            drawLatticeFillGeneratorEditor(scale, availableMolecules, nullptr, latticeFillComposition_, latticeFillOptions_, true, true, false);
+            break;
+        default:
+            AppSignals::UI::ClearGeneratorPhantom.emit();
+            break;
         }
-        break;
-    case GeneratorKind::Gas:
-        ImGui::SliderInt("##gas_atom_count", &generatorAtomCount_, 100, 300000);
-        ImGui::SameLine();
-        drawIOPanelAtomTypeCombo("##atom_type_gas", gasAtomType_, 80.f * scale, scale);
-        createRequested = ImGui::Button("Create##gas", ImVec2(buttonWidth * scale, 0.f));
-        if (createRequested) {
-            AppSignals::UI::CreateGas.emit(generatorAtomCount_, gasAtomType_, generatorIs3D_, generatorDensity_);
-        }
-        ImGui::SameLine();
-        ImGui::Checkbox("3D##gas", &generatorIs3D_);
-        ImGui::SameLine();
-        drawGasDensitySlider("##gas_density", generatorDensity_, generatorIs3D_, scale);
-        break;
-    case GeneratorKind::MixedGas:
-        ImGui::SetNextItemWidth(140.0f * scale);
-        ImGui::SliderInt("##mixed_gas_atom_count", &generatorAtomCount_, 100, 300000);
-        ImGui::SameLine();
-        drawGasDensitySlider("##mixed_gas_density", generatorDensity_, generatorIs3D_, scale);
-        for (size_t i = 0; i < mixedGasEntries_.size(); ++i) {
-            MixedGasEntry& entry = mixedGasEntries_[i];
-            ImGui::PushID(static_cast<int>(i));
-            drawIOPanelAtomTypeCombo("##mixed_type", entry.type, 80.f * scale, scale);
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(72.0f * scale);
-            const bool percentChanged = ImGui::DragFloat("##mixed_percent", &entry.concentrationPercent, 0.25f, 0.0f, 100.0f, "%.1f%%");
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(72.0f * scale);
-            const bool countChanged = ImGui::DragInt("##mixed_count", &entry.absoluteCount, 1.0f, 0, INT_MAX, "%d");
-            ImGui::SameLine();
-            ImGui::BeginDisabled(mixedGasEntries_.size() <= 1);
-            const bool removeEntry = ImGui::Button("x##mixed_remove", ImVec2(22.0f * scale, 0.0f));
-            ImGui::EndDisabled();
-            if (percentChanged) {
-                entry.concentrationPercent = std::clamp(entry.concentrationPercent, 0.0f, 100.0f);
-                entry.absoluteCount = generatorAtomCount_ > 0
-                                          ? static_cast<int>(std::round(static_cast<float>(generatorAtomCount_) * entry.concentrationPercent / 100.0f))
-                                          : 0;
-                rebalanceMixedGasCounts(mixedGasEntries_, generatorAtomCount_, i);
-            }
-            if (countChanged) {
-                generatorAtomCount_ = std::max(generatorAtomCount_, mixedGasAssignedCount(mixedGasEntries_));
-                mixedGasLastTotalCount_ = generatorAtomCount_;
-                rebalanceMixedGasCounts(mixedGasEntries_, generatorAtomCount_, i);
-            }
-            ImGui::PopID();
-            if (removeEntry) {
-                mixedGasEntries_.erase(mixedGasEntries_.begin() + static_cast<std::ptrdiff_t>(i));
-                normalizeMixedGasToTotal(mixedGasEntries_, generatorAtomCount_);
-                --i;
-            }
-        }
-        if (ImGui::Button("Add type##mixed_gas", ImVec2(buttonWidth * scale, 0.f))) {
-            mixedGasEntries_.push_back({.type = AtomData::Type::Z, .concentrationPercent = 0.0f, .absoluteCount = 0});
-            normalizeMixedGasToTotal(mixedGasEntries_, generatorAtomCount_);
-        }
-        createRequested = ImGui::Button("Create##mixed_gas", ImVec2(buttonWidth * scale, 0.f));
-        if (createRequested) {
-            std::vector<Generators::AtomTypeSpec> atomSpecs;
-            atomSpecs.reserve(mixedGasEntries_.size());
-            for (const MixedGasEntry& entry : mixedGasEntries_) {
-                atomSpecs.push_back(Generators::AtomTypeSpec{
-                    .type = entry.type,
-                    .absoluteCount = std::max(entry.absoluteCount, 0),
-                    .concentrationPercent = 0.0f,
-                });
-            }
-            AppSignals::UI::CreateMixedGas.emit(generatorAtomCount_, std::move(atomSpecs), generatorIs3D_, generatorDensity_);
-        }
-        ImGui::SameLine();
-        ImGui::Checkbox("3D##mixed_gas", &generatorIs3D_);
-        break;
-    case GeneratorKind::HexLattice:
-        if (!hexSeparateAxes_) {
-            drawAxisCountControls("hex_axis", generatorAxisCounts_, scale, 2, 200, true);
-        }
-        else {
-            ImGui::SetNextItemWidth(120.0f * scale);
-            ImGui::SliderInt("Size##atoms_per_axis_ic", &generatorAxisCount_, 2, 200);
-            generatorAxisCounts_ = makeUniformAxisCounts(generatorAxisCount_, true);
-        }
-        if (hexSeparateAxes_) {
-            ImGui::SameLine();
-        }
-        drawIOPanelAtomTypeCombo("##atom_type_ic", icAtomType_, 80.f * scale, scale);
-        createRequested = ImGui::Button("Create##hex", ImVec2(buttonWidth * scale, 0.f));
-        if (createRequested) {
-            AppSignals::UI::CreateHexLattice.emit(generatorAxisCounts_, icAtomType_);
-        }
-        ImGui::SameLine();
-        ImGui::Checkbox("3D##hex", &generatorIs3D_);
-        ImGui::SameLine();
-        if (ImGui::Checkbox("Scalar##hex", &hexSeparateAxes_)) {
-            if (!hexSeparateAxes_) {
-                generatorAxisCounts_ = makeUniformAxisCounts(generatorAxisCount_, true);
-            }
-            else {
-                generatorAxisCount_ = std::max(generatorAxisCounts_.x, 2);
-                generatorAxisCounts_ = makeUniformAxisCounts(generatorAxisCount_, true);
-            }
-        }
-        break;
-    case GeneratorKind::TriangularBipyramid:
-        ImGui::SliderInt("##atoms_per_axis_tbp", &generatorAxisCount_, 2, 100);
-        ImGui::SameLine();
-        drawIOPanelAtomTypeCombo("##atom_type_tbp", tbpAtomType_, 80.f * scale, scale);
-        createRequested = ImGui::Button("Create##tbp", ImVec2(buttonWidth * scale, 0.f));
-        if (createRequested) {
-            AppSignals::UI::CreateTriangularBipyramidCrystal.emit(generatorAxisCount_, tbpAtomType_);
-        }
-        break;
     }
 
     ImGui::SeparatorText("Сцены");
@@ -674,4 +866,102 @@ void IOPanel::draw(float scale, glm::ivec2 windowSize, Lattice::Simulation& simu
     }
 
     ImGui::End();
+}
+
+void IOPanel::drawRegionSpawnPopup(float scale, ImVec2 anchorPos, std::string_view popupId) {
+    const float popupWidth = kCompactPopupWidth * scale;
+    const float popupHeight = 0.0f;
+
+    ImGui::SetNextWindowPos(anchorPos, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(popupWidth, popupHeight), ImGuiCond_Always);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f * scale, 10.0f * scale));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f * scale);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.28f, 0.35f, 0.44f, 0.95f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.10f, 0.13f, 0.17f, 0.96f));
+
+    if (ImGui::Begin(popupId.data(), nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted("Spawn region");
+        drawRegionSpawnSettings(scale, true);
+    }
+    ImGui::End();
+
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar(3);
+}
+
+void IOPanel::drawRegionSpawnSettings(float scale, bool compact) {
+    const std::vector<std::string> availableMolecules = listAvailableMolecules();
+    const bool generatorOpen = compact ? compactComboRow("Spawn", "##region_tool_generator_kind", generatorLabel(regionToolGeneratorKind_), scale)
+                                       : ComboStyle::beginCombo("##region_tool_generator_kind", generatorLabel(regionToolGeneratorKind_), 0.0f,
+                                                                scale);
+    if (generatorOpen) {
+        constexpr GeneratorKind generators[] = {
+            GeneratorKind::RandomFill,
+            GeneratorKind::LatticeFill,
+        };
+        for (GeneratorKind kind : generators) {
+            const bool selected = kind == regionToolGeneratorKind_;
+            if (ImGui::Selectable(generatorLabel(kind), selected)) {
+                regionToolGeneratorKind_ = kind;
+            }
+            if (selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    switch (regionToolGeneratorKind_) {
+    case GeneratorKind::RandomFill:
+        drawRandomFillGeneratorEditor(scale, availableMolecules, nullptr, regionToolRandomFillComposition_, regionToolRandomFillOptions_, false,
+                                      false, compact);
+        break;
+    case GeneratorKind::LatticeFill:
+        drawLatticeFillGeneratorEditor(scale, availableMolecules, nullptr, regionToolLatticeFillComposition_, regionToolLatticeFillOptions_, false,
+                                       false, compact);
+        break;
+    default:
+        regionToolGeneratorKind_ = GeneratorKind::RandomFill;
+        drawRandomFillGeneratorEditor(scale, availableMolecules, nullptr, regionToolRandomFillComposition_, regionToolRandomFillOptions_, false,
+                                      false, compact);
+        break;
+    }
+}
+
+bool IOPanel::canSpawnFromRegionTool() const {
+    return true;
+}
+
+bool IOPanel::emitSpawnFromRegion(const AppSignals::UI::GeneratorRegionSpec& region) const {
+    return emitSpawnFromRegion(region, "Z");
+}
+
+bool IOPanel::emitSpawnFromRegion(const AppSignals::UI::GeneratorRegionSpec& region, std::string_view species) const {
+    if (regionToolGeneratorKind_ == GeneratorKind::LatticeFill) {
+        AppSignals::UI::LatticeFillRequest request;
+        request.region = region;
+        request.composition = regionToolLatticeFillComposition_;
+        if (request.composition.empty()) {
+            request.composition = {
+                {.species = species.empty() ? std::string("Z") : std::string(species), .fraction = 1.0f},
+            };
+        }
+        request.options = regionToolLatticeFillOptions_;
+        AppSignals::UI::CreateLatticeFill.emit(request);
+        return true;
+    }
+
+    AppSignals::UI::RandomFillRequest request;
+    request.region = region;
+    request.composition = regionToolRandomFillComposition_;
+    if (request.composition.empty()) {
+        request.composition = {
+            {.species = species.empty() ? std::string("Z") : std::string(species), .fraction = 1.0f},
+        };
+    }
+    request.options = regionToolRandomFillOptions_;
+    AppSignals::UI::CreateRandomFill.emit(request);
+    return true;
 }

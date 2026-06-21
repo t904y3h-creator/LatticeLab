@@ -8,6 +8,7 @@
 
 #include "Engine/Simulation.h"
 #include "Engine/physics/Atom/AtomData.h"
+#include "Lattice/Plugins/ClassicMD/ClassicMDPlugin.h"
 
 using namespace Lattice;
 
@@ -53,12 +54,11 @@ static void printMetrics(const Simulation& simulation) {
     std::cout << "  Temperature: " << metrics.temperatureK() << " K\n";
 }
 
-static void createInitialSimulation(Simulation& simulation, glm::vec3 worldSize, glm::vec3 gravity, float dt, float maxSpeed, float damping) {
+static void createInitialSimulation(Simulation& simulation, glm::vec3 worldSize, glm::vec3 gravity, float dt, float maxSpeed) {
     simulation.createWorld(worldSize);
     simulation.setDt(dt);
     simulation.setGravity(gravity);
     simulation.setMaxParticleSpeed(maxSpeed);
-    simulation.setAccelDamping(damping);
     simulation.world().setTitle("CLI-driven LatticeEngine");
     simulation.world().setDescription("Interactive CLI demo world.");
 
@@ -68,12 +68,13 @@ static void createInitialSimulation(Simulation& simulation, glm::vec3 worldSize,
 }
 
 int main(int argc, char** argv) {
+    registerClassicMDPlugin();
+
     int defaultSteps = 100;
     float dt = 0.01f;
     glm::vec3 gravity{0.0f, 0.0f, 0.0f};
     glm::vec3 worldSize{10.0f, 10.0f, 10.0f};
     float maxSpeed = 100.0f;
-    float damping = 0.99f;
     bool verbose = false;
 
     CLI::App app{"LatticeEngine CLI"};
@@ -82,7 +83,6 @@ int main(int argc, char** argv) {
     app.add_option("--gravity", gravity, "Gravity vector x y z")->expected(3);
     app.add_option("--world-size", worldSize, "World size x y z")->expected(3);
     app.add_option("--max-speed", maxSpeed, "Maximum particle speed");
-    app.add_option("--damping", damping, "Acceleration damping factor")->check(CLI::Range(0.0, 1.0));
     app.add_flag("-v,--verbose", verbose, "Enable verbose output");
     CLI11_PARSE(app, argc, argv);
 
@@ -90,7 +90,7 @@ int main(int argc, char** argv) {
     std::cout << "Welcome to LatticeEngine CLI. Type 'help' to see available commands.\n\n";
 
     Simulation simulation;
-    createInitialSimulation(simulation, worldSize, gravity, dt, maxSpeed, damping);
+    createInitialSimulation(simulation, worldSize, gravity, dt, maxSpeed);
 
     if (verbose) {
         printMetrics(simulation);
@@ -154,7 +154,7 @@ int main(int argc, char** argv) {
         }
         if (command == "reset") {
             simulation = Simulation();
-            createInitialSimulation(simulation, worldSize, gravity, dt, maxSpeed, damping);
+            createInitialSimulation(simulation, worldSize, gravity, dt, maxSpeed);
             std::cout << "Simulation reset.\n";
             continue;
         }

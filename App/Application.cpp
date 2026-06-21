@@ -3,16 +3,19 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
+#include <iostream>
 
 #include "App/AppActions.h"
 #include "App/CreateWindow.h"
 #include "App/WindowController.h"
-#include "Lattice/Generators/Generators.h"
+#include "Lattice/Scripting/LuaState.h"
 #include "App/UserSettings.h"
 #include "App/viewport/SceneViewport.h"
 #include "App/interaction/ToolsManager.h"
 #include "Lattice/Engine/Simulation.h"
 #include "Lattice/Engine/metrics/Profiler.h"
+#include "Lattice/Plugins/ClassicMD/ClassicMDPlugin.h"
 #include "GUI/interface/interface.h"
 #include "GUI/io/keyboard/Keyboard.h"
 #include "GUI/io/manager/EventManager.h"
@@ -28,6 +31,9 @@ constexpr int FPS = 60;
 constexpr int LPS = 20;
 
 namespace {
+    const std::filesystem::path kBootstrapScriptPath = std::filesystem::path("Mods") / "Base" / "scenes" / "hexzerium.lua";
+    const std::filesystem::path kBaseMoleculesPath = std::filesystem::path("Mods") / "Base" / "Molecules";
+
     uint32_t makeXYZStepInterval(float simulationStepsPerSecond, int captureFps) {
         const float sanitizedStepsPerSecond = std::max(simulationStepsPerSecond, 1.0f);
         const int sanitizedCaptureFps = std::max(captureFps, 1);
@@ -40,9 +46,34 @@ namespace {
         glfwShowWindow(window);
         glfwFocusWindow(window);
     }
+
+    void loadBaseMoleculeTemplates(Lattice::Simulation& simulation) {
+        if (!std::filesystem::exists(kBaseMoleculesPath) || !std::filesystem::is_directory(kBaseMoleculesPath)) {
+            return;
+        }
+
+        for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(kBaseMoleculesPath)) {
+            if (!entry.is_regular_file() || entry.path().extension() != ".pdb") {
+                continue;
+            }
+
+            const std::string moleculeName = entry.path().stem().string();
+            if (moleculeName.empty()) {
+                continue;
+            }
+
+            try {
+                simulation.loadMoleculeTemplate(moleculeName, entry.path());
+            }
+            catch (const std::exception& e) {
+                std::cerr << "Failed to load molecule template '" << entry.path().string() << "': " << e.what() << "\n";
+            }
+        }
+    }
 }
 
 int Application::run() {
+    registerClassicMDPlugin();
     const UserSettings userSettings = UserSettingsIO::load();
     GLFWwindow* window = createWindow(userSettings.windowState);
     if (!window) {
@@ -56,8 +87,11 @@ int Application::run() {
 
     // инициализация систем
     Lattice::Simulation simulation;
+    loadBaseMoleculeTemplates(simulation);
 
-    simulation.createWorld(glm::vec3(120.0f, 120.0f, 120.0f));
+    simulation.createWorld(glm::vec3(120.0f, 120.0f, 10.0f));
+    Lattice::LuaState luaState;
+    luaState.bindSimulation(simulation);
 
     CaptureController captureController;
     const SceneViewport::RendererType initialRendererType =
@@ -98,7 +132,7 @@ int Application::run() {
     renderer.renderer().getRenderData(0).drawMemoryOrder = userSettings.rendererDrawMemoryOrder;
     renderer.renderer().getRenderData(0).speedColorMode = userSettings.rendererSpeedColorMode;
     renderer.renderer().getRenderData(0).speedGradientMax = userSettings.rendererSpeedGradientMax;
-    simulation.world().getIntegrator().setScheme(userSettings.simulationIntegrator);
+    simulation.setIntegrator(userSettings.simulationIntegrator);
     simulation.world().setBondFormationEnabled(userSettings.simulationBondFormationEnabled);
     simulation.world().setLJEnabled(userSettings.simulationLJEnabled);
     simulation.world().setCoulombEnabled(userSettings.simulationCoulombEnabled);
@@ -108,20 +142,6 @@ int Application::run() {
 
     simulation.world().setVectorFieldSlice(static_cast<int>(simulation.world().getWorldSize().z * 0.5f));
 
-    
-    // создание сцены
-    // Generators::triangularBipyramidCrystal(simulation, 8, AtomData::Type::H);
-    // Generators::AngularVelocity(simulation, Vec3f(0.0f, 0.25f, 0.0f));
-    // Generators::hexLattice(simulation, {5, 5, 1}, AtomData::Type::Z);
-    
-    // std::vector<Generators::AtomTypeSpec> gasSpecs = {
-    //         // {AtomData::Type::O, 0, 80.0f},    // 80% водорода
-    //         {AtomData::Type::Na, 0, 50.0f},   // 10% натрия
-    //         {AtomData::Type::Cl, 0, 50.0f}    // 10% хлора
-    //     };
-    // Generators::randomGasMixed(simulation, 500, gasSpecs, false, 6.0, 6.0, 1.0f, 5.0f, 0);
-    // simulation.createAtom(glm::vec3(20, 25, 3), glm::vec3(0, 0, 0), AtomData::Type::Na);
-    // simulation.createAtom(glm::vec3(30, 25, 3), glm::vec3(0, 0, 0), AtomData::Type::Cl);
     renderer.syncScene(simulation);
 
     auto startTime = Clock::now();
@@ -208,7 +228,7 @@ int Application::run() {
         .rendererFieldCellSize = renderer.renderer().getRenderData(0).fieldCellSize,
         .rendererFieldSmoothing = renderer.renderer().getRenderData(0).fieldSmoothing,
         .rendererFieldContourStep = renderer.renderer().getRenderData(0).fieldContourStep,
-        .simulationIntegrator = simulation.world().getIntegrator().getScheme(),
+        .simulationIntegrator = std::string(simulation.getIntegrator()),
         .simulationBondFormationEnabled = simulation.world().isBondFormationEnabled(),
         .simulationLJEnabled = simulation.isLJEnabled(),
         .simulationCoulombEnabled = simulation.isCoulombEnabled(),

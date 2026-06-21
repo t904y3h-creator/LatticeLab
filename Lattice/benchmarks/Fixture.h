@@ -6,10 +6,10 @@
 
 #include <benchmark/benchmark.h>
 
-#include "BenchmarkScenes.h"
-#include "Engine/Simulation.h"
-#include "Engine/physics/integrators/StepOps.h"
-#include "Engine/physics/integrators/VerletScheme.h"
+#include "SceneBuilder.h"
+#include "Lattice/Engine/Simulation.h"
+#include "Lattice/Plugins/ClassicMD/Integrators/StepOps.h"
+#include "Lattice/Plugins/ClassicMD/Integrators/Verlet.h"
 
 namespace Benchmarks {
     constexpr double kDt = 0.01;
@@ -21,20 +21,14 @@ namespace Benchmarks {
     };
 
     inline SceneKind sceneFromString(std::string_view value) {
-        if (value == "ideal_crystal3d") {
-            return SceneKind::IdealCrystal3D;
+        if (value == "gas") {
+            return SceneKind::Gas;
         }
-        if (value == "crystal2d") {
-            return SceneKind::Crystal2D;
-        }
-        if (value == "random_gas2d") {
-            return SceneKind::RandomGas2D;
-        }
-        return SceneKind::Crystal3D;
+        return SceneKind::Crystal;
     }
 
     inline SceneKind& selectedScene() {
-        static SceneKind scene = SceneKind::Crystal3D;
+        static SceneKind scene = SceneKind::Crystal;
         return scene;
     }
 
@@ -86,12 +80,9 @@ namespace Benchmarks {
 
     inline int atomCountFromExtent(SceneKind scene, int sceneExtent) {
         switch (scene) {
-        case SceneKind::IdealCrystal3D:
-        case SceneKind::Crystal3D:
+        case SceneKind::Gas:
+        case SceneKind::Crystal:
             return sceneExtent * sceneExtent * sceneExtent;
-        case SceneKind::Crystal2D:
-        case SceneKind::RandomGas2D:
-            return sceneExtent * sceneExtent;
         }
 
         return sceneExtent;
@@ -116,13 +107,13 @@ public:
     void TearDown(benchmark::State&) override { simulation_.reset(); }
 
 protected:
-    StepData makeStepData(float accelDamping = 0.9f) {
-        return StepData{
+    StepContext makeStepData() {
+        return StepContext{
             .world = simulation_->world(),
             .forceField = simulation_->forceField(),
             .neighborList = simulation_->neighborList(),
+            .thermostat = simulation_->world().getThermostat().activeThermostat(),
             .allowBondFormation = simulation_->isBondFormationEnabled(),
-            .accelDamping = accelDamping,
             .dt = static_cast<float>(Benchmarks::kDt),
         };
     }
@@ -159,7 +150,7 @@ protected:
         rebuildScene();
         warmupScene();
         prepareNeighborList();
-        StepData stepData = makeStepData();
+        StepContext stepData = makeStepData();
         StepOps::computeForces(stepData);
     }
 
@@ -167,8 +158,8 @@ protected:
 
     void prepareForCorrect() {
         prepareForPredict();
-        StepData stepData = makeStepData();
-        StepOps::predictAndSync(stepData, &VerletScheme::predict);
+        StepContext stepData = makeStepData();
+        StepOps::predictAndSync(stepData, &Verlet::predict);
         StepOps::computeForces(stepData);
     }
 

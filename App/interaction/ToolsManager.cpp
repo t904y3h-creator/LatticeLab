@@ -5,9 +5,8 @@
 #include <limits>
 
 #include "App/interaction/tools/AddAtomTool.h"
+#include "App/interaction/tools/AreaTool.h"
 #include "App/interaction/tools/CursorTool.h"
-#include "App/interaction/tools/FrameTool.h"
-#include "App/interaction/tools/LassoTool.h"
 #include "App/interaction/tools/RemoveAtomTool.h"
 #include "App/interaction/tools/RulerTool.h"
 #include "GUI/interface/interface.h"
@@ -47,10 +46,10 @@ namespace {
         switch (tool) {
         case SideToolsPanel::Tool::Cursor:
             return ToolsManager::Mode::Cursor;
-        case SideToolsPanel::Tool::Frame:
-            return ToolsManager::Mode::Frame;
+        case SideToolsPanel::Tool::Rect:
         case SideToolsPanel::Tool::Lasso:
-            return ToolsManager::Mode::Lasso;
+        case SideToolsPanel::Tool::Brush:
+            return ToolsManager::Mode::Area;
         case SideToolsPanel::Tool::Ruler:
             return ToolsManager::Mode::Ruler;
         case SideToolsPanel::Tool::AddAtom:
@@ -72,6 +71,7 @@ SideToolsPanel* ToolsManager::sideToolsPanel = nullptr;
 ToolContext ToolsManager::toolContext = {};
 std::array<std::unique_ptr<ITool>, ToolsManager::kModeCount> ToolsManager::toolInstances = {};
 ToolsManager::Mode ToolsManager::syncedMode = ToolsManager::Mode::Cursor;
+uint8_t ToolsManager::syncedPanelToolKey = static_cast<uint8_t>(SideToolsPanel::Tool::Cursor);
 Lattice::Simulation::WorldId ToolsManager::pickingWorldId = 0;
 glm::ivec2 ToolsManager::startMousePos = {};
 glm::ivec2 ToolsManager::lastSceneMousePos = {};
@@ -93,17 +93,19 @@ void ToolsManager::init(GLFWwindow* w, Lattice::Simulation& sim, std::unique_ptr
     toolContext.renderer = &rend;
     toolContext.pickingSystem = pickingSystem;
     toolContext.uiState = &appInterface.state();
+    toolContext.ioPanel = &appInterface.ioPanel;
 
     for (auto& tool : toolInstances) {
         tool.reset();
     }
     toolInstances[toIndex(Mode::Cursor)] = std::make_unique<CursorTool>(toolContext);
-    toolInstances[toIndex(Mode::Frame)] = std::make_unique<FrameTool>(toolContext);
-    toolInstances[toIndex(Mode::Lasso)] = std::make_unique<LassoTool>(toolContext);
+    toolInstances[toIndex(Mode::Area)] = std::make_unique<AreaTool>(toolContext, *sideToolsPanel);
     toolInstances[toIndex(Mode::Ruler)] = std::make_unique<RulerTool>(toolContext);
     toolInstances[toIndex(Mode::AddAtom)] = std::make_unique<AddAtomTool>(toolContext);
     toolInstances[toIndex(Mode::RemoveAtom)] = std::make_unique<RemoveAtomTool>(toolContext);
     syncedMode = currentMode();
+    syncedPanelToolKey =
+        static_cast<uint8_t>(sideToolsPanel != nullptr ? sideToolsPanel->getSelectedTool() : SideToolsPanel::Tool::Cursor);
     isInteracting = false;
     lastSceneMousePos = {};
 }
@@ -184,14 +186,19 @@ void ToolsManager::onFrame(glm::ivec2 mousePos, float deltaTime) {
 
     syncPickingWorldToActive(true);
     syncToolMode();
-    if (uiState != nullptr && uiState->cursorHovered) {
-        return;
+    const bool cursorHovered = uiState != nullptr && uiState->cursorHovered;
+    if (!cursorHovered) {
+        lastSceneMousePos = mousePos;
     }
 
-    lastSceneMousePos = mousePos;
-
     if (ITool* tool = activeTool(); tool != nullptr) {
-        tool->onFrame(mousePos, deltaTime);
+        if (!cursorHovered || currentMode() == Mode::Area) {
+            tool->onFrame(mousePos, deltaTime);
+        }
+    }
+
+    if (cursorHovered) {
+        return;
     }
 
     if (currentMode() == Mode::Cursor) {
@@ -217,7 +224,7 @@ ToolsManager::Mode ToolsManager::currentMode() {
     return mapPanelTool(sideToolsPanel->getSelectedTool());
 }
 
-bool ToolsManager::isSelectionMode(ToolsManager::Mode mode) { return mode == Mode::Frame || mode == Mode::Lasso; }
+bool ToolsManager::isSelectionMode(ToolsManager::Mode mode) { return mode == Mode::Area; }
 
 void ToolsManager::Overlay::draw() {
     if (!ToolsManager::simulation || !ToolsManager::renderer || !ToolsManager::renderer->get() || !ToolsManager::pickingSystem) {
@@ -232,7 +239,9 @@ ITool* ToolsManager::activeTool() noexcept { return toolInstances[toIndex(curren
 
 void ToolsManager::syncToolMode() noexcept {
     const Mode mode = currentMode();
-    if (mode == syncedMode) {
+    const uint8_t panelToolKey =
+        static_cast<uint8_t>(sideToolsPanel != nullptr ? sideToolsPanel->getSelectedTool() : SideToolsPanel::Tool::Cursor);
+    if (mode == syncedMode && panelToolKey == syncedPanelToolKey) {
         return;
     }
 
@@ -248,6 +257,7 @@ void ToolsManager::syncToolMode() noexcept {
     }
     isInteracting = false;
     syncedMode = mode;
+    syncedPanelToolKey = panelToolKey;
 }
 
 void ToolsManager::syncPickingWorldToActive(bool clearSelection) {

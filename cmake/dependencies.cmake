@@ -25,6 +25,82 @@ FetchContent_MakeAvailable(glfw)
 set(BUILD_SHARED_LIBS "${_saved_build_shared_libs}")
 unset(_saved_build_shared_libs)
 
+# --- Настройка Lua ---
+FetchContent_Declare(
+    lua
+    URL https://www.lua.org/ftp/lua-5.4.6.tar.gz
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_MakeAvailable(lua)
+
+# --- Настройка sol2 ---
+FetchContent_Declare(
+    sol2
+    GIT_REPOSITORY https://github.com/ThePhD/sol2.git
+    GIT_TAG        v3.3.1
+    GIT_SHALLOW    ON
+)
+FetchContent_MakeAvailable(sol2)
+
+set(_sol2_optional_impl "${sol2_SOURCE_DIR}/include/sol/optional_implementation.hpp")
+if(EXISTS "${_sol2_optional_impl}")
+    file(READ "${_sol2_optional_impl}" _sol2_optional_impl_content)
+    string(REPLACE
+        "template <class... Args>\n\t\tT& emplace(Args&&... args) noexcept {\n\t\t\tstatic_assert(std::is_constructible<T, Args&&...>::value, \"T must be constructible with Args\");\n\n\t\t\t*this = nullopt;\n\t\t\tthis->construct(std::forward<Args>(args)...);\n\t\t}\n"
+        "template <class... Args>\n\t\tT& emplace(Args&&... args) noexcept {\n\t\t\tstatic_assert(sizeof...(Args) == 1, \"optional<T&>::emplace expects exactly one argument\");\n\t\t\tauto&& value = std::get<0>(std::forward_as_tuple(std::forward<Args>(args)...));\n\t\t\tm_value = std::addressof(value);\n\t\t\treturn *m_value;\n\t\t}\n"
+        _sol2_optional_impl_content
+        "${_sol2_optional_impl_content}"
+    )
+    file(WRITE "${_sol2_optional_impl}" "${_sol2_optional_impl_content}")
+endif()
+
+if(NOT TARGET sol2)
+    add_library(sol2 INTERFACE)
+    target_include_directories(sol2 INTERFACE "${sol2_SOURCE_DIR}/include")
+endif()
+
+add_library(lua_static STATIC
+    ${lua_SOURCE_DIR}/src/lapi.c
+    ${lua_SOURCE_DIR}/src/lauxlib.c
+    ${lua_SOURCE_DIR}/src/lbaselib.c
+    ${lua_SOURCE_DIR}/src/lcode.c
+    ${lua_SOURCE_DIR}/src/lcorolib.c
+    ${lua_SOURCE_DIR}/src/lctype.c
+    ${lua_SOURCE_DIR}/src/ldblib.c
+    ${lua_SOURCE_DIR}/src/ldebug.c
+    ${lua_SOURCE_DIR}/src/ldo.c
+    ${lua_SOURCE_DIR}/src/ldump.c
+    ${lua_SOURCE_DIR}/src/lfunc.c
+    ${lua_SOURCE_DIR}/src/lgc.c
+    ${lua_SOURCE_DIR}/src/linit.c
+    ${lua_SOURCE_DIR}/src/liolib.c
+    ${lua_SOURCE_DIR}/src/llex.c
+    ${lua_SOURCE_DIR}/src/lmathlib.c
+    ${lua_SOURCE_DIR}/src/lmem.c
+    ${lua_SOURCE_DIR}/src/loadlib.c
+    ${lua_SOURCE_DIR}/src/lobject.c
+    ${lua_SOURCE_DIR}/src/lopcodes.c
+    ${lua_SOURCE_DIR}/src/loslib.c
+    ${lua_SOURCE_DIR}/src/lparser.c
+    ${lua_SOURCE_DIR}/src/lstate.c
+    ${lua_SOURCE_DIR}/src/lstring.c
+    ${lua_SOURCE_DIR}/src/lstrlib.c
+    ${lua_SOURCE_DIR}/src/ltable.c
+    ${lua_SOURCE_DIR}/src/ltablib.c
+    ${lua_SOURCE_DIR}/src/ltm.c
+    ${lua_SOURCE_DIR}/src/lundump.c
+    ${lua_SOURCE_DIR}/src/lutf8lib.c
+    ${lua_SOURCE_DIR}/src/lvm.c
+    ${lua_SOURCE_DIR}/src/lzio.c
+)
+
+add_library(lua::lua ALIAS lua_static)
+target_include_directories(lua_static PUBLIC ${lua_SOURCE_DIR}/src)
+
+if(UNIX AND NOT APPLE)
+    target_link_libraries(lua_static PUBLIC m dl)
+endif()
+
 # --- Настройка WebGPU ---
 FetchContent_Declare(
     webgpu_distribution
@@ -60,6 +136,7 @@ add_library(imgui STATIC
     ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_wgpu.cpp
 )
+set_target_properties(imgui PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(imgui PUBLIC
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
@@ -78,7 +155,17 @@ FetchContent_Declare(
     GIT_TAG        v0.6.8
     GIT_SHALLOW    ON
 )
-FetchContent_Populate(ImGuiFileDialog)
+FetchContent_MakeAvailable(ImGuiFileDialog)
+
+if(TARGET ImGuiFileDialog)
+    target_include_directories(ImGuiFileDialog PUBLIC
+        ${imguifiledialog_SOURCE_DIR}
+        ${imgui_SOURCE_DIR}
+        ${imgui_SOURCE_DIR}/backends
+    )
+    target_link_libraries(ImGuiFileDialog PUBLIC imgui)
+endif()
+
 add_library(ImGuiFileDialog_lib STATIC
     ${imguifiledialog_SOURCE_DIR}/ImGuiFileDialog.cpp
 )
@@ -87,6 +174,9 @@ target_include_directories(ImGuiFileDialog_lib PUBLIC
     ${imgui_SOURCE_DIR}
 )
 target_link_libraries(ImGuiFileDialog_lib PUBLIC imgui)
+target_compile_options(ImGuiFileDialog_lib PRIVATE
+    $<$<CXX_COMPILER_ID:GNU>:-Wno-stringop-overflow>
+)
 
 # --- Настройка GLM ---
 FetchContent_Declare(
@@ -105,9 +195,11 @@ FetchContent_Declare(
     GIT_SHALLOW    ON
 
 )
-FetchContent_Populate(zpp_bits)
-add_library(zpp_bits INTERFACE)
-target_include_directories(zpp_bits INTERFACE "${zpp_bits_SOURCE_DIR}")
+FetchContent_MakeAvailable(zpp_bits)
+if(NOT TARGET zpp_bits)
+    add_library(zpp_bits INTERFACE)
+    target_include_directories(zpp_bits INTERFACE "${zpp_bits_SOURCE_DIR}")
+endif()
 
 # --- Настройка zstd ---
 FetchContent_Declare(
@@ -133,3 +225,9 @@ set(BUILD_SHARED_LIBS OFF)
 FetchContent_MakeAvailable(zstd)
 set(BUILD_SHARED_LIBS "${_saved_build_shared_libs}")
 unset(_saved_build_shared_libs)
+
+if(TARGET libzstd_static)
+    target_compile_options(libzstd_static PRIVATE
+        $<$<C_COMPILER_ID:GNU>:-Wno-maybe-uninitialized>
+    )
+endif()

@@ -29,8 +29,7 @@ public:
 
     enum class Mode : uint8_t {
         Cursor,
-        Frame,
-        Lasso,
+        Area,
         Ruler,
         AddAtom,
         RemoveAtom,
@@ -72,6 +71,7 @@ private:
     static ToolContext toolContext;
     static std::array<std::unique_ptr<ITool>, kModeCount> toolInstances;
     static Mode syncedMode;
+    static uint8_t syncedPanelToolKey;
     static Lattice::Simulation::WorldId pickingWorldId;
 
     static glm::ivec2 startMousePos;

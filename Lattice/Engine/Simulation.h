@@ -1,15 +1,40 @@
 #pragma once
 
+#include <cstdint>
+#include <filesystem>
+#include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include <glm/glm.hpp>
 
-#include "Engine/World.h"
-#include "Engine/io/XYZRecordingSession.h"
+#include "Lattice/Engine/World.h"
+#include "Lattice/Engine/io/MoleculeTemplate.h"
+#include "Lattice/Engine/io/XYZRecordingSession.h"
 
 namespace Lattice {
+
+enum class SpawnCollisionMode : uint8_t {
+    Add,
+    Replace,
+};
+
+struct SpawnOptions {
+    glm::vec3 velocity = glm::vec3(0.0f);
+    glm::vec3 min = glm::vec3(0.0f);
+    glm::vec3 max = glm::vec3(0.0f);
+    float temperature = 0.0f;
+    float margin = 2.0f;
+    float minDistance = 4.0f;
+    uint32_t maxAttempts = 32;
+    bool randomRotation = true;
+    bool fixed = false;
+    SpawnCollisionMode collisionMode = SpawnCollisionMode::Add;
+    size_t replaceExistingCount = std::numeric_limits<size_t>::max();
+};
 
 class Simulation {
 public:
@@ -39,18 +64,33 @@ public:
 
     void createAtom(glm::vec3 start_coords, glm::vec3 start_speed, AtomData::Type type, bool fixed = false);
     void removeAtom(size_t atomIndex);
+    void removeAtoms(std::vector<size_t> atomIndices);
     void addBond(size_t aIndex, size_t bIndex);
+    bool loadMoleculeTemplate(std::string name, const std::filesystem::path& pdbPath);
+    bool hasMoleculeTemplate(std::string_view name) const;
+    [[nodiscard]] const MoleculeTemplate* findMoleculeTemplate(std::string_view name) const;
+    [[nodiscard]] const std::unordered_map<std::string, MoleculeTemplate>& moleculeTemplates() const noexcept { return moleculeTemplates_; }
+    [[nodiscard]] bool canSpawnMolecule(std::string_view speciesName, glm::vec3 start_coords,
+                                        const std::optional<glm::mat3>& rotation = std::nullopt) const;
+    [[nodiscard]] bool spawnMoleculeChecked(std::string_view speciesName, glm::vec3 start_coords, const std::optional<glm::mat3>& rotation,
+                                            bool fixed);
+    [[nodiscard]] bool spawnMolecule(std::string_view speciesName, glm::vec3 start_coords, const std::optional<glm::mat3>& rotation, bool fixed);
+    [[nodiscard]] bool randomSpawn(std::string_view speciesName, const SpawnOptions& options = {});
+    [[nodiscard]] static glm::mat3 randomRotationMatrix();
+    float lj_min(AtomData::Type a, AtomData::Type b);
 
     void setDt(float dt) { world().setDt(dt); }
     float getDt() const { return world().getDt(); }
-    void setIntegrator(Integrator::Scheme scheme) { world().getIntegrator().setScheme(scheme); }
-    Integrator::Scheme getIntegrator() const { return world().getIntegrator().getScheme(); }
+    bool setIntegrator(std::string_view id) { return world().getIntegrator().setIntegrator(id); }
+    std::string_view getIntegrator() const { return world().getIntegrator().getIntegrator(); }
     void setMaxParticleSpeed(float maxSpeed) { world().getIntegrator().setMaxParticleSpeed(maxSpeed); }
     float getMaxParticleSpeed() const { return world().getIntegrator().maxParticleSpeed(); }
-    void setAccelDamping(float accelDamping) { world().getIntegrator().setAccelDamping(accelDamping); }
-    float getAccelDamping() const { return world().getIntegrator().accelDamping(); }
-    void setAndersenTemperature(float temperature) { world().getIntegrator().setAndersenTemperature(temperature); }
-    float getAndersenTemperature() const { return world().getIntegrator().andersenTemperature(); }
+    bool setThermostat(std::string_view id) { return world().getThermostat().setThermostat(id); }
+    std::string_view getThermostat() const { return world().getThermostat().getThermostat(); }
+    void setThermostatTemperature(float temperature) { world().getThermostat().setTemperature(temperature); }
+    float getThermostatTemperature() const { return world().getThermostat().temperature(); }
+    void setAndersenTemperature(float temperature) { setThermostatTemperature(temperature); }
+    float getAndersenTemperature() const { return getThermostatTemperature(); }
 
     size_t getSimStep() const { return world().getSimStep(); }
     float simTimeNs() const { return world().getSimTimeNs(); }
@@ -96,10 +136,14 @@ public:
 
     // Быстрое создание большого количества атомов
     void reserveAtoms(size_t count) { world().reserveAtoms(count); }
-    void appendAtomFast(glm::vec3 startCoords, glm::vec3 startSpeed, AtomData::Type type, bool fixed = false) {
-        world().appendAtomFast(startCoords, startSpeed, type, fixed);
+    [[nodiscard]] AtomStorage::AtomId appendAtomFast(glm::vec3 startCoords, glm::vec3 startSpeed, AtomData::Type type, bool fixed = false) {
+        return world().appendAtomFast(startCoords, startSpeed, type, fixed);
     }
-    void finalizeAtomBatch() { world().finalizeAtomBatch(); }
+    void beginAtomBatch() {
+        atomBatchActive_ = true;
+        atomBatchDirty_ = false;
+    }
+    void finishAtomBatch();
 
     void setSizeBox(glm::vec3 newSize, int cellSize = -1);
     void clear();
@@ -113,9 +157,13 @@ public:
 
 private:
     friend class SimulationStateIO;
-
+    [[nodiscard]] glm::vec3 temperatureVelocity(std::string_view speciesName, float temperature, bool is3d,glm::vec3 fallbackVelocity = glm::vec3(0.0f)) const;
     std::vector<World> worlds_;
     WorldId activeWorldIndex_ = 0;
+    // загруженные шаблоны молекул
+    std::unordered_map<std::string, MoleculeTemplate> moleculeTemplates_;
     XYZRecordingSession xyzRecording_;
+    bool atomBatchActive_ = false;
+    bool atomBatchDirty_ = false;
 };
 }

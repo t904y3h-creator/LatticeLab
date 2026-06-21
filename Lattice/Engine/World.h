@@ -1,20 +1,21 @@
 #pragma once
 
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include <glm/glm.hpp>
 
-#include "Engine/NeighborSearch/NeighborList.h"
-#include "Engine/NeighborSearch/SpatialGrid.h"
-#include "Engine/metrics/EnergyMetrics.h"
-#include "Engine/physics/Atom/AtomData.h"
-#include "Engine/physics/Atom/AtomStorage.h"
-#include "Engine/physics/Bond.h"
-#include "Engine/physics/ForceField.h"
-#include "Engine/physics/Integrator.h"
-#include "Engine/physics/VectorField.h"
+#include "Lattice/Engine/NeighborSearch/NeighborList.h"
+#include "Lattice/Engine/NeighborSearch/SpatialGrid.h"
+#include "Lattice/Engine/metrics/EnergyMetrics.h"
+#include "Lattice/Engine/physics/Atom/AtomData.h"
+#include "Lattice/Engine/physics/Atom/AtomStorage.h"
+#include "Lattice/Engine/physics/IForceField.h"
+#include "Lattice/Engine/physics/IIntegrator.h"
+#include "Lattice/Engine/physics/IThermostat.h"
+#include "Lattice/Engine/physics/VectorField.h"
 
 class World {
 public:
@@ -69,6 +70,7 @@ public:
     void addAtom(const glm::vec3& start_coords, const glm::vec3& start_speed, AtomData::Type type, bool fixed);
     void addBond(size_t aIndex, size_t bIndex);
     void removeAtom(size_t atomIndex);
+    void removeAtoms(std::vector<size_t> atomIndices);
     void remapAtomIndices(std::span<const uint32_t> oldToNew);
     void clearAtoms() {
         atomStorage_.clear();
@@ -76,10 +78,12 @@ public:
     };
     void clearBonds() { bonds_.clear(); }
     void reserveAtoms(size_t count) { atomStorage_.reserve(count); }
-    void appendAtomFast(const glm::vec3& startCoords, const glm::vec3& startSpeed, AtomData::Type type, bool fixed = false) {
-        atomStorage_.addAtom(startCoords, startSpeed, type, fixed);
+    [[nodiscard]] AtomStorage::AtomId appendAtomFast(const glm::vec3& startCoords, const glm::vec3& startSpeed, AtomData::Type type,
+                                                     bool fixed = false) {
+        const AtomStorage::AtomId atomId = atomStorage_.addAtom(startCoords, startSpeed, type, fixed);
         invalidateMetrics();
         invalidateVectorField();
+        return atomId;
     }
     void finalizeAtomBatch();
 
@@ -94,6 +98,7 @@ public:
 
     struct WorldState {
         Integrator integrator;
+        Thermostat thermostat;
         ForceField forceField_;
         float Dt = 0.01f;
         size_t sim_step = 0;
@@ -115,6 +120,8 @@ public:
     
     Integrator& getIntegrator() noexcept { return state_.integrator; }
     const Integrator& getIntegrator() const noexcept { return state_.integrator; }
+    Thermostat& getThermostat() noexcept { return state_.thermostat; }
+    const Thermostat& getThermostat() const noexcept { return state_.thermostat; }
     
     ForceField& getForceField() noexcept { return state_.forceField_; }
     const ForceField& getForceField() const noexcept { return state_.forceField_; }
@@ -152,13 +159,13 @@ public:
     void resetRuntimeState() noexcept { restoreRuntimeState(0, 0.0f); }
 
 private:
-    glm::vec3 size;
-    glm::vec3 renderOffset;
-    glm::vec3 gravity;
+    glm::vec3 size{0.0f};
+    glm::vec3 renderOffset{0.0f};
+    glm::vec3 gravity{0.0f};
 
     bool ljEnabled = true;
     bool coulombEnabled = true;
-    bool longRangeForcesEnabled = true;
+    bool longRangeForcesEnabled = false;
 
     AtomStorage atomStorage_;
     SpatialGrid grid;
@@ -166,7 +173,7 @@ private:
     VectorField vectorField_;
     bool vectorFieldDirty_ = true;
     Bond::List bonds_;
-    std::string title_;
+    std::string title_ = "default";
     std::string description_;
     WorldState state_;
 };

@@ -23,6 +23,8 @@
 #define ICON_FA_BUG "\uf188"
 
 namespace {
+    constexpr float kUiScaleWheelStep = 0.1f;
+
     PreviewFrameRect computeScenePreviewRect(const ImVec2& displaySize, float uiScale) {
         const float frameAspect = 1.282f;
         const float horizontalMargin = 36.0f * uiScale;
@@ -153,15 +155,21 @@ int Interface::update() {
     io.DeltaTime = deltaTime;
     lastTime_ = currentTime;
 
+    if (io.KeyCtrl && io.MouseWheel != 0.0f && !io.WantTextInput) {
+        const float direction = io.MouseWheel > 0.0f ? 1.0f : -1.0f;
+        const float nextScale = std::round((uiScaleMultiplier() + direction * kUiScaleWheelStep) * 10.0f) / 10.0f;
+        setUiScaleMultiplier(nextScale);
+    }
+
     int width, height;
     glfwGetWindowSize(window_, &width, &height);
 
     ImGui::PushFont(fontManager.main);
     toolsPanel.draw(styleManager.getScale(), debugPanel, settingsPanel, ioPanel);
-    periodicPanel.draw(styleManager.getScale(), glm::ivec2(width, height), uiState_.selectedAtom);
+    periodicPanel.draw(styleManager.getScale(), glm::ivec2(width, height), *simulation_, uiState_.selectedAtom, uiState_.spawnSpecies);
     simControlPanel.draw(styleManager.getScale(), glm::ivec2(width, height), uiState_.pause, uiState_.simulationSpeed, uiState_.simStep,
                          deltaTime);
-    sideToolsPanel.draw(styleManager.getScale(), glm::ivec2(width, height), fontManager.icons, fontManager.dialog);
+    sideToolsPanel.draw(styleManager.getScale(), glm::ivec2(width, height), ioPanel, fontManager.icons, fontManager.dialog);
     statsPanel.draw(styleManager.getScale(), glm::ivec2(width, height));
     if (uiState_.drawToolTrip) {
         const ImVec2 mouse = ImGui::GetMousePos();

@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "Engine/Simulation.h"
+#include "Lattice/Engine/Simulation.h"
 
 using Lattice::Simulation;
 
@@ -250,9 +250,9 @@ namespace {
         simulation.setWorldDescription(lastFrameComment);
         simulation.reserveAtoms(lastFrameAtoms.size());
         for (const LoadedAtomData& atom : lastFrameAtoms) {
-            simulation.appendAtomFast(atom.coords + translation, atom.speed, static_cast<AtomData::Type>(atom.type), atom.fixed);
+            (void)simulation.appendAtomFast(atom.coords + translation, atom.speed, static_cast<AtomData::Type>(atom.type), atom.fixed);
         }
-        simulation.finalizeAtomBatch();
+        simulation.finishAtomBatch();
         for (size_t i = 0; i < lastFrameAtoms.size(); ++i) {
             simulation.atoms().charge(i) = lastFrameAtoms[i].charge;
         }
@@ -277,7 +277,7 @@ namespace {
         file << kBlockIndent << "step " << simulation.world().getSimStep() << "\n";
         file << kBlockIndent << "time_ns " << simulation.world().getSimTimeNs() << "\n";
         file << kBlockIndent << "dt " << simulation.world().getDt() << "\n";
-        file << kBlockIndent << "integrator " << static_cast<int>(simulation.world().getIntegrator().getScheme()) << "\n";
+        file << kBlockIndent << "integrator " << simulation.getIntegrator() << "\n";
         const glm::vec3 gravity = simulation.getGravity();
         file << kBlockIndent << "gravity " << gravity.x << " " << gravity.y << " " << gravity.z << "\n";
         file << kBlockIndent << "bond_formation " << static_cast<int>(simulation.world().isBondFormationEnabled()) << "\n";
@@ -286,8 +286,7 @@ namespace {
         file << kBlockIndent << "cell_size " << simulation.world().getGridCellSize() << "\n";
         file << kBlockIndent << "cutoff_nl " << simulation.getNeighborListCutoff() << "\n";
         file << kBlockIndent << "skin_nl " << simulation.getNeighborListSkin() << "\n";
-        file << kBlockIndent << "max_speed " << simulation.getMaxParticleSpeed() << "\n";
-        file << kBlockIndent << "accel_damping " << simulation.getAccelDamping() << "\n\n";
+        file << kBlockIndent << "max_speed " << simulation.getMaxParticleSpeed() << "\n\n";
 
         const AtomStorage& atoms = simulation.atoms();
         file << "[atoms]\n";
@@ -325,11 +324,10 @@ namespace {
         std::string loadedTitle;
         std::string loadedDescription;
         float loadedDt = simulation.world().getDt();
-        int loadedIntegrator = static_cast<int>(simulation.world().getIntegrator().getScheme());
+        std::string loadedIntegrator = std::string(simulation.getIntegrator());
         glm::vec3 loadedGravity = simulation.world().getGravity();
         bool loadedBondFormationEnabled = simulation.world().isBondFormationEnabled();
         float loadedMaxSpeed = simulation.world().getIntegrator().maxParticleSpeed();
-        float loadedAccelDamping = simulation.world().getIntegrator().accelDamping();
 
         std::string tag;
         while (file >> tag) {
@@ -383,7 +381,8 @@ namespace {
                 file >> loadedMaxSpeed;
             }
             else if (tag == "accel_damping") {
-                file >> loadedAccelDamping;
+                float ignored = 0.0f;
+                file >> ignored;
             }
             else if (tag == "atom") {
                 LoadedAtomData atom;
@@ -404,19 +403,18 @@ namespace {
 
         simulation.setSizeBox(boxSize, cellSize);
         simulation.setDt(loadedDt);
-        simulation.setIntegrator(static_cast<Integrator::Scheme>(loadedIntegrator));
+        simulation.setIntegrator(loadedIntegrator);
         simulation.setGravity(loadedGravity);
         simulation.setBondFormationEnabled(loadedBondFormationEnabled);
         simulation.setMaxParticleSpeed(loadedMaxSpeed);
-        simulation.setAccelDamping(loadedAccelDamping);
         simulation.setWorldTitle(loadedTitle);
         simulation.setWorldDescription(loadedDescription);
 
         simulation.reserveAtoms(atoms.size());
         for (const LoadedAtomData& atom : atoms) {
-            simulation.appendAtomFast(atom.coords, atom.speed, static_cast<AtomData::Type>(atom.type), atom.fixed);
+            (void)simulation.appendAtomFast(atom.coords, atom.speed, static_cast<AtomData::Type>(atom.type), atom.fixed);
         }
-        simulation.finalizeAtomBatch();
+        simulation.finishAtomBatch();
         simulation.restoreRuntimeState(loadedStep, loadedTimeNs);
     }
 
@@ -435,13 +433,12 @@ namespace {
         std::string loadedTitle;
         std::string loadedDescription;
         float loadedDt = simulation.world().getDt();
-        int loadedIntegrator = static_cast<int>(simulation.world().getIntegrator().getScheme());
+        std::string loadedIntegrator = std::string(simulation.getIntegrator());
         glm::vec3 loadedGravity = simulation.world().getGravity();
         bool loadedBondFormationEnabled = simulation.world().isBondFormationEnabled();
         bool loadedLJEnabled = simulation.world().isLJEnabled();
         bool loadedCoulombEnabled = simulation.world().isCoulombEnabled();
         float loadedMaxSpeed = simulation.world().getIntegrator().maxParticleSpeed();
-        float loadedAccelDamping = simulation.world().getIntegrator().accelDamping();
 
         std::vector<LoadedAtomData> atoms;
         std::vector<std::pair<size_t, size_t>> bonds;
@@ -523,7 +520,8 @@ namespace {
                 stream >> loadedMaxSpeed;
             }
             else if (tag == "accel_damping") {
-                stream >> loadedAccelDamping;
+                float ignored = 0.0f;
+                stream >> ignored;
             }
             else if (tag == "atom") {
                 LoadedAtomData atom;
@@ -549,21 +547,20 @@ namespace {
 
         simulation.setSizeBox(worldSize, cellSize);
         simulation.setDt(loadedDt);
-        simulation.setIntegrator(static_cast<Integrator::Scheme>(loadedIntegrator));
+        simulation.setIntegrator(loadedIntegrator);
         simulation.setGravity(loadedGravity);
         simulation.setBondFormationEnabled(loadedBondFormationEnabled);
         simulation.setLJEnabled(loadedLJEnabled);
         simulation.setCoulombEnabled(loadedCoulombEnabled);
         simulation.setMaxParticleSpeed(loadedMaxSpeed);
-        simulation.setAccelDamping(loadedAccelDamping);
         simulation.setWorldTitle(loadedTitle);
         simulation.setWorldDescription(loadedDescription);
 
         simulation.reserveAtoms(atoms.size());
         for (const LoadedAtomData& atom : atoms) {
-            simulation.appendAtomFast(atom.coords, atom.speed, static_cast<AtomData::Type>(atom.type), atom.fixed);
+            (void)simulation.appendAtomFast(atom.coords, atom.speed, static_cast<AtomData::Type>(atom.type), atom.fixed);
         }
-        simulation.finalizeAtomBatch();
+        simulation.finishAtomBatch();
         for (size_t i = 0; i < atoms.size(); ++i) {
             simulation.atoms().charge(i) = atoms[i].charge;
         }

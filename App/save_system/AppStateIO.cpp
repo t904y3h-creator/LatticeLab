@@ -18,6 +18,7 @@
 #include "App/save_system/AppSaveState.h"
 #include "Lattice/Engine/Simulation.h"
 #include "Lattice/Engine/io/SimulationStateIO.h"
+#include "Lattice/Scripting/LuaState.h"
 #include "GUI/interface/UiState.h"
 #include "Rendering/BaseRenderer.h"
 #include "Rendering/backend/WGPUContext.h"
@@ -279,9 +280,20 @@ void AppStateIO::load(Lattice::Simulation& simulation, BaseRenderer& renderer, s
         else if (extension == ".latbin") {
             AppStateIO::loadBinary(simulation, renderer, path);
         }
+        else if (extension == ".lua") {
+            AppStateIO::loadLuaScene(simulation, path);
+        }
     }
     catch (const std::exception& e) {
         std::cerr << "Failed to load scene '" << path << "': " << e.what() << "\n";
+    }
+}
+
+void AppStateIO::loadLuaScene(Lattice::Simulation& simulation, std::string_view path) {
+    Lattice::LuaState luaState;
+    luaState.bindSimulation(simulation);
+    if (!luaState.runFile(std::filesystem::path(path))) {
+        throw std::runtime_error(luaState.lastError());
     }
 }
 
@@ -298,7 +310,7 @@ void AppStateIO::saveBinary(CaptureController& captureController, const PreviewF
     simState.dt = simulation.world().getDt();
     simState.time_ns = simulation.world().getSimTimeNs();
     simState.step = simulation.world().getSimStep();
-    simState.integrator = simulation.world().getIntegrator().getScheme();
+    simState.integrator = std::string(simulation.getIntegrator());
     simState.gravity = simulation.getGravity();
     simState.bondFormationEnabled = simulation.world().isBondFormationEnabled(),
     simState.LJEnabled = simulation.isLJEnabled();
@@ -308,7 +320,6 @@ void AppStateIO::saveBinary(CaptureController& captureController, const PreviewF
     simState.neighborListCutoff = simulation.getNeighborListCutoff();
     simState.neighborListSkin = simulation.getNeighborListSkin();
     simState.maxParticleSpeed = simulation.getMaxParticleSpeed();
-    simState.accelDamping = simulation.getAccelDamping();
     simState.atomMobileCount = simulation.atoms().mobileCount();
     simState.x.assign(simulation.atoms().xDataSpan().begin(), simulation.atoms().xDataSpan().end());
     simState.y.assign(simulation.atoms().yDataSpan().begin(), simulation.atoms().yDataSpan().end());
@@ -347,7 +358,7 @@ void AppStateIO::saveBinary(CaptureController& captureController, const PreviewF
 
         appState.header.previewWidth = preview.width;
         appState.header.previewHeight = preview.height;
-        appState.header.previewFormat = img.format;
+        appState.header.previewFormat = static_cast<uint32_t>(img.format);
 
         if (preview.width > 0 && preview.height > 0) {
             const size_t byteCount = static_cast<size_t>(preview.width) * preview.height * 4;
@@ -445,7 +456,6 @@ void AppStateIO::loadBinary(Lattice::Simulation& simulation, BaseRenderer& rende
     simulation.setLJEnabled(simState.LJEnabled);
     simulation.setCoulombEnabled(simState.coulombEnabled);
     simulation.setMaxParticleSpeed(simState.maxParticleSpeed);
-    simulation.setAccelDamping(simState.accelDamping);
 
     const uint64_t atomMobileCount = simState.atomMobileCount;
     const uint64_t atomCount = simState.x.size();
@@ -461,7 +471,7 @@ void AppStateIO::loadBinary(Lattice::Simulation& simulation, BaseRenderer& rende
     simulation.reserveAtoms(atomCount);
     atoms.init(atomCount, atomMobileCount, simState.x, simState.y, simState.z, simState.vx, simState.vy, simState.vz, simState.atomType,
                simState.atomCharge);
-    simulation.finalizeAtomBatch();
+    simulation.finishAtomBatch();
 
     for (const auto& [aIndex, bIndex] : simState.bonds) {
         simulation.addBond(aIndex, bIndex);
